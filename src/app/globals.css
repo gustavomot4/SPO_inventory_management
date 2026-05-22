@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Variáveis CSS globais */
+:root {
+  --foreground-rgb: 17, 24, 39;       /* gray-900 */
+  --background-rgb: 249, 250, 251;    /* gray-50 */
+}
+
+/* Reset básico e defaults */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Utilitários para impressão da comanda térmica 80mm */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 4mm;
+  }
+
+  body {
+    font-size: 11px;
+    color: #000;
+    background: #fff;
+  }
+
+  /* Oculta elementos de navegação na impressão */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Área da comanda */
+  .print-only {
+    display: block !important;
+  }
+}
