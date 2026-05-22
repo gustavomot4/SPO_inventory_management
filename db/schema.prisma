@@ -1,0 +1,279 @@
+// =============================================================================
+// PRISMA SCHEMA — SPO (Sistema Pimenta Ousada)
+// Database Agent | DOC-012 | 2026-05-22
+// =============================================================================
+//
+// Stack: Next.js 14+ + Prisma ORM + SQLite (MVP) → PostgreSQL (v2/cloud)
+// Para migrar para PostgreSQL: alterar provider = "postgresql" e DATABASE_URL.
+// Nenhuma linha de lógica de negócio muda — só a connection string.
+//
+// CONVENÇÕES DESTE SCHEMA:
+//   - Preços SEMPRE em centavos (Int) — nunca Float/Decimal para dinheiro
+//   - IDs via cuid() — string, opaco, URL-safe
+//   - Timestamps: createdAt (default now) + updatedAt (@updatedAt automático)
+//   - Soft delete em Product: campo deletedAt (null = ativo)
+//   - Todos os foreign keys têm @@index explícito (Prisma/SQLite não cria automaticamente)
+//   - Constraint CHECK (stockQuantity >= 0) deve ser adicionada via migração raw SQL
+//     após `prisma migrate dev` — ver SCHEMA_DESIGN.md seção "Restrições pós-migração"
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum UserRole {
+  ADMIN    // Dona da loja — acesso total
+  OPERATOR // Vendedora — registra vendas e consulta estoque
+}
+
+enum SaleStatus {
+  ACTIVE    // Venda válida
+  CANCELLED // Venda cancelada (nunca excluída — estoque revertido)
+}
+
+enum PaymentMethod {
+  CASH        // Dinheiro
+  PIX         // Pix
+  DEBIT_CARD  // Cartão de débito
+  CREDIT_CARD // Cartão de crédito
+}
+
+enum MovementType {
+  ENTRY        // Entrada: recebimento de mercadoria (StockEntry)
+  SALE         // Saída: venda finalizada
+  CANCELLATION // Entrada: reversão de venda cancelada
+  LOSS         // Saída: perda manual registrada
+  ADJUSTMENT   // Ajuste manual de inventário (positivo ou negativo)
+}
+
+// =============================================================================
+// USERS — Autenticação e perfis de acesso
+// =============================================================================
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  username     String   @unique
+  passwordHash String   // bcrypt hash — nunca armazenar senha em texto plano
+  role         UserRole @default(OPERATOR)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sales Sale[]
+
+  @@map("users")
+}
+
+// =============================================================================
+// CATALOG — Categorias, Fornecedores, Produtos e Variações
+// =============================================================================
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique // ex: "Blusa", "Calça", "Vestido", "Saia", "Conjunto"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products     Product[]
+  stockEntries StockEntry[]
+
+  @@map("suppliers")
+}
+
+// Product = produto-base (ex: "Blusa Floral")
+// As variações (tamanho + cor) vivem em ProductVariation.
+model Product {
+  id         String    @id @default(cuid())
+  name       String
+  categoryId String
+  supplierId String?   // fornecedor principal — opcional
+  priceCents Int       // preço de venda em centavos — NUNCA usar Float para dinheiro
+                       // ex: R$ 59,90 → 5990
+  isActive   Boolean   @default(true)
+  deletedAt  DateTime? // soft delete: null = ativo | timestamp = inativo
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  category   Category          @relation(fields: [categoryId], references: [id])
+  supplier   Supplier?         @relation(fields: [supplierId], references: [id])
+  variations ProductVariation[]
+
+  @@index([categoryId])
+  @@index([supplierId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("products")
+}
+
+// ProductVariation = cada combinação única de tamanho + cor de um produto.
+// RN-001.3: variações diferentes são registros de estoque DISTINTOS.
+// Ex: "Blusa Floral / P / Rosa" e "Blusa Floral / M / Azul" = 2 variações.
+model ProductVariation {
+  id            String  @id @default(cuid())
+  productId     String
+  sku           String  @unique // código único — gerado automaticamente ou informado
+  size          String  // PP | P | M | G | GG | XGG (ou livre para acessórios futuros)
+  color         String
+
+  // Estoque
+  stockQuantity Int     @default(0) // quantidade atual — NUNCA deve ser negativa
+                                    // CHECK (stock_quantity >= 0) via raw SQL pós-migração
+  minStock      Int     @default(2) // limite mínimo para alerta — RN-003.1
+
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product      Product         @relation(fields: [productId], references: [id])
+  saleItems    SaleItem[]
+  stockEntries StockEntry[]
+  movements    StockMovement[]
+
+  // Uma variação por produto+tamanho+cor — não pode duplicar
+  @@unique([productId, size, color])
+  @@index([productId])
+  @@index([sku])
+  @@index([isActive])
+  @@index([stockQuantity]) // queries de alerta: WHERE stock_quantity <= min_stock
+  @@map("product_variations")
+}
+
+// =============================================================================
+// STOCK — Entradas de estoque
+// =============================================================================
+
+// Cada recebimento de mercadoria gera um StockEntry.
+// RN-002.2: registra produto, quantidade, data, fornecedor (opt), custo (opt).
+model StockEntry {
+  id            String    @id @default(cuid())
+  variationId   String
+  supplierId    String?
+  quantity      Int       // unidades recebidas — deve ser > 0 (validar na aplicação)
+  unitCostCents Int?      // custo unitário em centavos — opcional, para controle interno
+  notes         String?
+  receivedAt    DateTime  @default(now()) // data real do recebimento (pode diferir de createdAt)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  variation ProductVariation @relation(fields: [variationId], references: [id])
+  supplier  Supplier?        @relation(fields: [supplierId], references: [id])
+  movement  StockMovement?   // 1:1 — toda entrada gera exatamente 1 movimento de auditoria
+
+  @@index([variationId])
+  @@index([supplierId])
+  @@index([receivedAt])
+  @@map("stock_entries")
+}
+
+// =============================================================================
+// SALES — Vendas e itens
+// =============================================================================
+
+// Sale = cabeçalho da venda.
+// RN-004.4: registra data, hora, itens, valor total e forma de pagamento.
+// RN-004.6: cancelamento NÃO exclui — marca status como CANCELLED e reverte estoque.
+model Sale {
+  id            String        @id @default(cuid())
+  userId        String        // usuário que registrou a venda
+  status        SaleStatus    @default(ACTIVE)
+  paymentMethod PaymentMethod
+  totalCents    Int           // soma de todos os SaleItem.subtotalCents
+                              // armazenado explicitamente para integridade e performance
+  notes         String?
+  cancelledAt   DateTime?     // timestamp do cancelamento — null se ACTIVE
+  cancelReason  String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user      User            @relation(fields: [userId], references: [id])
+  items     SaleItem[]
+  movements StockMovement[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])     // relatórios por período (hoje, semana, mês) — RN-008.2
+  @@index([paymentMethod]) // análise por forma de pagamento
+  @@map("sales")
+}
+
+// SaleItem = uma linha da venda (produto + variação + quantidade + preço snapshot).
+// RN-004.2: registra produto, tamanho, cor, quantidade, preço unitário NO MOMENTO da venda.
+// RN-004.3: alterações futuras de preço NÃO afetam vendas passadas — snapshot é permanente.
+model SaleItem {
+  id             String @id @default(cuid())
+  saleId         String
+  variationId    String
+  quantity       Int
+  unitPriceCents Int    // snapshot do preço no momento da venda — NUNCA atualizar após criação
+  subtotalCents  Int    // = quantity × unitPriceCents — armazenado explicitamente (não computado)
+                        // garante integridade mesmo se unitPriceCents for alterado por bug
+  createdAt      DateTime @default(now())
+  // SaleItem não tem updatedAt — é imutável após criação
+
+  sale      Sale             @relation(fields: [saleId], references: [id])
+  variation ProductVariation @relation(fields: [variationId], references: [id])
+
+  @@index([saleId])
+  @@index([variationId]) // relatório de produtos mais vendidos — RN-008.2
+  @@map("sale_items")
+}
+
+// =============================================================================
+// AUDIT — Movimentação de estoque
+// =============================================================================
+
+// StockMovement = log completo e imutável de toda movimentação de estoque.
+// Todo evento que altera stockQuantity gera exatamente 1 StockMovement.
+// RN-002.3: registra produto, quantidade, data e motivo.
+// O campo balanceAfter permite reconstrução do histórico ponto a ponto.
+model StockMovement {
+  id           String       @id @default(cuid())
+  variationId  String
+  saleId       String?      // preenchido nos tipos SALE e CANCELLATION
+  stockEntryId String?      @unique // 1:1 com StockEntry — preenchido no tipo ENTRY
+  type         MovementType
+  quantity     Int          // positivo = entrada | negativo = saída
+                            // ex: venda de 2 unidades → quantity = -2
+  balanceAfter Int          // snapshot de stockQuantity após este movimento
+                            // permite auditoria e reconstrução de histórico
+  notes        String?
+  createdAt    DateTime     @default(now())
+  // StockMovement é imutável — sem updatedAt
+
+  variation  ProductVariation @relation(fields: [variationId], references: [id])
+  sale       Sale?            @relation(fields: [saleId], references: [id])
+  stockEntry StockEntry?      @relation(fields: [stockEntryId], references: [id])
+
+  @@index([variationId])
+  @@index([saleId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
