@@ -1,20 +1,16 @@
 // =============================================================================
 // PRISMA SCHEMA — SPO (Sistema Pimenta Ousada)
-// Database Agent | MVP-004 | 2026-05-22
-// Versão: 2.0 — Escopo pós-alinhamento com cliente
+// Database Agent | MVP-004 + DT-004 fix | 2026-05-22
+// Versão: 2.1 — Adicionados @map para alinhar camelCase com colunas snake_case
 // =============================================================================
 //
 // Stack: Next.js 14+ + Prisma ORM + SQLite (MVP) → PostgreSQL (v2/cloud)
 // Para migrar para PostgreSQL: alterar provider = "postgresql" e DATABASE_URL.
 // Nenhuma linha de lógica de negócio muda — só a connection string.
 //
-// MUDANÇAS v2.0 (2026-05-22):
-//   - REMOVIDO: model User, model Supplier, enum UserRole
-//   - REMOVIDO: Product.supplierId, StockEntry.supplierId, Sale.userId
-//   - ADICIONADO: model CardMachine (maquininhas com taxa em basis points)
-//   - ADICIONADO: model Settings (PIN de acesso + configurações globais)
-//   - ATUALIZADO: Sale com subtotalCents, discountCents, cardMachineId, feeCents
-//   - ATUALIZADO: PaymentMethod — DEBIT_CARD→DEBIT, CREDIT_CARD→CREDIT
+// MUDANÇAS v2.1 (DT-004):
+//   - Adicionado @map em TODOS os campos cujo nome camelCase difere do snake_case da coluna
+//   - A migration SQL não mudou — apenas o schema foi corrigido
 //
 // CONVENÇÕES:
 //   - Preços SEMPRE em centavos (Int) — nunca Float/Decimal para dinheiro
@@ -23,7 +19,6 @@
 //   - Timestamps: createdAt (default now) + updatedAt (@updatedAt automático)
 //   - Soft delete em Product: campo deletedAt (null = ativo)
 //   - Todos os foreign keys têm @@index explícito (SQLite não cria automaticamente)
-//   - CHECK (stockQuantity >= 0) via trigger SQLite na migration — ver SCHEMA_DESIGN.md
 // =============================================================================
 
 generator client {
@@ -40,53 +35,50 @@ datasource db {
 // =============================================================================
 
 enum SaleStatus {
-  ACTIVE    // Venda válida
-  CANCELLED // Venda cancelada — estoque revertido, registro preservado para auditoria
+  ACTIVE
+  CANCELLED
 }
 
 enum PaymentMethod {
-  CASH   // Dinheiro — não requer maquininha
-  PIX    // Pix — não requer maquininha
-  DEBIT  // Cartão de débito — requer seleção de CardMachine
-  CREDIT // Cartão de crédito — requer seleção de CardMachine
+  CASH
+  PIX
+  DEBIT
+  CREDIT
 }
 
 enum MovementType {
-  ENTRY        // Entrada: recebimento de mercadoria (vinculado a StockEntry)
-  SALE         // Saída: venda finalizada
-  CANCELLATION // Entrada: reversão de venda cancelada
-  LOSS         // Saída: perda manual registrada
-  ADJUSTMENT   // Ajuste manual de inventário (positivo ou negativo)
+  ENTRY
+  SALE
+  CANCELLATION
+  LOSS
+  ADJUSTMENT
 }
 
 // =============================================================================
-// CATALOG — Categorias, Produtos e Variações
+// CATALOG
 // =============================================================================
 
 model Category {
   id        String   @id @default(cuid())
-  name      String   @unique // ex: "Blusa", "Calça", "Vestido", "Saia", "Conjunto"
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name      String   @unique
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   products Product[]
 
   @@map("categories")
 }
 
-// Product = produto-base (ex: "Blusa Floral")
-// As variações (tamanho + cor) vivem em ProductVariation com estoque próprio.
 model Product {
   id         String    @id @default(cuid())
   name       String
-  categoryId String
-  priceCents Int       // preço de venda em centavos — NUNCA usar Float para dinheiro
-                       // ex: R$ 59,90 → 5990
-  isActive   Boolean   @default(true)
-  deletedAt  DateTime? // soft delete: null = ativo | timestamp = inativo (sem recuperação)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  categoryId String    @map("category_id")
+  priceCents Int       @map("price_cents")
+  isActive   Boolean   @default(true) @map("is_active")
+  deletedAt  DateTime? @map("deleted_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
   category   Category          @relation(fields: [categoryId], references: [id])
   variations ProductVariation[]
@@ -97,54 +89,47 @@ model Product {
   @@map("products")
 }
 
-// ProductVariation = cada combinação única de (tamanho + cor) de um produto.
-// RN-001.3: variações distintas são registros de estoque INDEPENDENTES.
-// Ex: "Blusa Floral / P / Rosa" e "Blusa Floral / M / Azul" → 2 variações.
 model ProductVariation {
   id            String   @id @default(cuid())
-  productId     String
-  sku           String   @unique // código único — gerado automaticamente ou informado manualmente
-  size          String           // PP | P | M | G | GG | XGG (ou livre para acessórios futuros)
+  productId     String   @map("product_id")
+  sku           String   @unique
+  size          String
   color         String
-  stockQuantity Int      @default(0) // quantidade atual — NUNCA negativa
-                                     // reforçado por trigger SQLite na migration
-  minStock      Int      @default(2) // limite mínimo para alerta de estoque — RN-003.1
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  stockQuantity Int      @default(0) @map("stock_quantity")
+  minStock      Int      @default(2) @map("min_stock")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   product      Product         @relation(fields: [productId], references: [id])
   saleItems    SaleItem[]
   stockEntries StockEntry[]
   movements    StockMovement[]
 
-  @@unique([productId, size, color]) // uma variação por produto+tamanho+cor
+  @@unique([productId, size, color])
   @@index([productId])
   @@index([sku])
   @@index([isActive])
-  @@index([stockQuantity])           // queries de alerta: WHERE stock_quantity <= min_stock
+  @@index([stockQuantity])
   @@map("product_variations")
 }
 
 // =============================================================================
-// STOCK — Entradas de estoque
+// STOCK
 // =============================================================================
 
-// Cada recebimento de mercadoria gera um StockEntry.
-// RN-002.2: registra produto, quantidade, data e custo unitário (opcional).
-// Fornecedor REMOVIDO do escopo — não é registrado.
 model StockEntry {
   id            String   @id @default(cuid())
-  variationId   String
-  quantity      Int      // unidades recebidas — deve ser > 0 (validar na API)
-  unitCostCents Int?     // custo unitário em centavos — opcional, para controle interno
+  variationId   String   @map("variation_id")
+  quantity      Int
+  unitCostCents Int?     @map("unit_cost_cents")
   notes         String?
-  receivedAt    DateTime @default(now()) // data real do recebimento (pode diferir de createdAt)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  receivedAt    DateTime @default(now()) @map("received_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   variation ProductVariation @relation(fields: [variationId], references: [id])
-  movement  StockMovement?   // 1:1 — toda entrada gera exatamente 1 StockMovement
+  movement  StockMovement?
 
   @@index([variationId])
   @@index([receivedAt])
@@ -152,20 +137,16 @@ model StockEntry {
 }
 
 // =============================================================================
-// SALES — Vendas, itens e maquininhas
+// SALES
 // =============================================================================
 
-// CardMachine = maquininha de cartão cadastrada pela dona.
-// RN-010: cada maquininha tem nome e taxa em basis points (199 = 1,99%).
-// Basis points evitam Float para percentuais — ver SCHEMA_DESIGN.md seção 2.6.
 model CardMachine {
   id             String   @id @default(cuid())
-  name           String   // ex: "Cielo Débito", "Stone Crédito à vista", "PagBank 2x"
-  feeBasisPoints Int      // taxa em basis points: 150 = 1,50% | 250 = 2,50%
-                          // feeCents = ROUND(totalCents * feeBasisPoints / 10000)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  name           String
+  feeBasisPoints Int      @map("fee_basis_points")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   sales Sale[]
 
@@ -173,92 +154,72 @@ model CardMachine {
   @@map("card_machines")
 }
 
-// Settings = configurações globais do sistema (singleton — 1 único registro).
-// Guarda o PIN de acesso às áreas sensíveis e metadados da loja.
-// RN-007: sistema aberto por padrão; PIN protege relatórios e configurações.
 model Settings {
-  id       String  @id @default(cuid())
-  pinHash  String? // hash bcrypt do PIN — null = PIN não configurado (acesso livre)
-  shopName String  @default("Pimenta Ousada")
-  // Campos futuros: logoUrl, address, etc.
-  updatedAt DateTime @updatedAt
+  id        String   @id @default(cuid())
+  pinHash   String?  @map("pin_hash")
+  shopName  String   @default("Pimenta Ousada") @map("shop_name")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
 }
 
-// Sale = cabeçalho da venda.
-// RN-004.4: registra data, itens, subtotal, desconto, total e forma de pagamento.
-// RN-004.5: desconto é aplicado manualmente, em valor fixo (centavos).
-// RN-004.6: cancelamento NÃO exclui — reverte estoque e marca status CANCELLED.
-// RN-004.10: taxa da maquininha é informativa — não deduzida do valor cobrado ao cliente.
 model Sale {
-  id             String        @id @default(cuid())
-  status         SaleStatus    @default(ACTIVE)
-  paymentMethod  PaymentMethod
-  subtotalCents  Int           // soma dos SaleItem.subtotalCents (ANTES do desconto)
-  discountCents  Int           @default(0) // desconto em centavos — 0 = sem desconto
-  totalCents     Int           // = subtotalCents - discountCents (calculado na API, nunca no frontend)
-  cardMachineId  String?       // null quando paymentMethod = CASH ou PIX
-  feeCents       Int?          // taxa estimada da maquininha em centavos — apenas informativo
-                               // = ROUND(totalCents * CardMachine.feeBasisPoints / 10000)
-  notes          String?
-  cancelledAt    DateTime?     // timestamp do cancelamento — null se ACTIVE
-  cancelReason   String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id            String        @id @default(cuid())
+  status        SaleStatus    @default(ACTIVE)
+  paymentMethod PaymentMethod @map("payment_method")
+  subtotalCents Int           @map("subtotal_cents")
+  discountCents Int           @default(0) @map("discount_cents")
+  totalCents    Int           @map("total_cents")
+  cardMachineId String?       @map("card_machine_id")
+  feeCents      Int?          @map("fee_cents")
+  notes         String?
+  cancelledAt   DateTime?     @map("cancelled_at")
+  cancelReason  String?       @map("cancel_reason")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
   cardMachine CardMachine?    @relation(fields: [cardMachineId], references: [id])
   items       SaleItem[]
   movements   StockMovement[]
 
   @@index([status])
-  @@index([createdAt])      // relatórios por período (hoje, semana, mês) — RN-008.2
-  @@index([paymentMethod])  // análise por forma de pagamento
-  @@index([cardMachineId])  // relatórios por maquininha
+  @@index([createdAt])
+  @@index([paymentMethod])
+  @@index([cardMachineId])
   @@map("sales")
 }
 
-// SaleItem = uma linha da venda — snapshot imutável.
-// RN-004.2: produto, tamanho, cor, quantidade e preço NO MOMENTO da venda.
-// RN-004.3: alterações futuras de preço NÃO retroagem em vendas passadas.
 model SaleItem {
   id             String   @id @default(cuid())
-  saleId         String
-  variationId    String
+  saleId         String   @map("sale_id")
+  variationId    String   @map("variation_id")
   quantity       Int
-  unitPriceCents Int      // snapshot do preço no momento da venda — NUNCA atualizar após criação
-  subtotalCents  Int      // = quantity × unitPriceCents — armazenado explicitamente para integridade
-  createdAt      DateTime @default(now())
-  // Sem updatedAt — SaleItem é imutável após criação
+  unitPriceCents Int      @map("unit_price_cents")
+  subtotalCents  Int      @map("subtotal_cents")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   sale      Sale             @relation(fields: [saleId], references: [id])
   variation ProductVariation @relation(fields: [variationId], references: [id])
 
   @@index([saleId])
-  @@index([variationId]) // relatório de produtos mais vendidos
+  @@index([variationId])
   @@map("sale_items")
 }
 
 // =============================================================================
-// AUDIT — Movimentação de estoque
+// AUDIT
 // =============================================================================
 
-// StockMovement = log completo e imutável de TODA alteração em stockQuantity.
-// Todo evento que muda stockQuantity deve gerar exatamente 1 StockMovement.
-// O campo balanceAfter permite reconstrução do histórico ponto a ponto.
-// RN-002.3: registra produto, quantidade, data e motivo.
 model StockMovement {
   id           String       @id @default(cuid())
-  variationId  String
-  saleId       String?      // preenchido nos tipos SALE e CANCELLATION
-  stockEntryId String?      @unique // 1:1 com StockEntry — preenchido no tipo ENTRY
+  variationId  String       @map("variation_id")
+  saleId       String?      @map("sale_id")
+  stockEntryId String?      @unique @map("stock_entry_id")
   type         MovementType
-  quantity     Int          // positivo = entrada | negativo = saída
-                            // ex: venda de 2 unidades → quantity = -2
-  balanceAfter Int          // snapshot de stockQuantity após este movimento (auditoria)
+  quantity     Int
+  balanceAfter Int          @map("balance_after")
   notes        String?
-  createdAt    DateTime     @default(now())
-  // Sem updatedAt — StockMovement é imutável após criação
+  createdAt    DateTime     @default(now()) @map("created_at")
 
   variation  ProductVariation @relation(fields: [variationId], references: [id])
   sale       Sale?            @relation(fields: [saleId], references: [id])
