@@ -1,6 +1,9 @@
 // =============================================================================
 // utils.ts -- Funcoes utilitarias compartilhadas
 // SPO -- Sistema Pimenta Ousada
+//
+// Nota: constantes de dominio (SaleStatus, PaymentMethod, MovementType e seus
+// labels) vivem em src/lib/enums.ts -- importe de la.
 // =============================================================================
 
 // ---------------------------------------------------------------------------
@@ -108,17 +111,9 @@ export const STOCK_STATUS_LABELS: Record<StockStatus, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// LABELS DE FORMAS DE PAGAMENTO
-// Traducao dos valores do enum PaymentMethod para portugues
-// MVP-004: PaymentMethod atualizado -- DEBIT_CARD->DEBIT | CREDIT_CARD->CREDIT
+// Labels de formas de pagamento -- re-exportados de enums.ts para compatibilidade
 // ---------------------------------------------------------------------------
-
-export const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  CASH:   'Dinheiro',
-  PIX:    'Pix',
-  DEBIT:  'Cartao de Debito',
-  CREDIT: 'Cartao de Credito',
-}
+export { PAYMENT_METHOD_LABELS } from '@/lib/enums'
 
 // ---------------------------------------------------------------------------
 // CALCULO DE TAXA DE MAQUININHA

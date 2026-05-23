@@ -20,7 +20,7 @@
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
+import { unsealData } from 'iron-session'
 import { sessionOptions, type PinSessionData } from '@/lib/pin-session'
 
 // ---------------------------------------------------------------------------
@@ -89,12 +89,23 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   // 3. Verificar sessão PIN no cookie
-  const session = await getIronSession<PinSessionData>(
-    request.cookies,
-    sessionOptions
-  )
+  // No Edge Runtime usamos unsealData diretamente (sem getIronSession) para
+  // evitar incompatibilidade de tipos entre RequestCookies e CookieStore.
+  // O middleware é read-only — nunca escreve na sessão.
+  let isPinVerified = false
+  const rawCookie = request.cookies.get(sessionOptions.cookieName)?.value
+  if (rawCookie) {
+    try {
+      const sessionData = await unsealData<PinSessionData>(rawCookie, {
+        password: sessionOptions.password as string,
+      })
+      isPinVerified = sessionData.isPinVerified === true
+    } catch {
+      // Cookie inválido ou expirado — trata como sem sessão
+    }
+  }
 
-  if (session.isPinVerified === true) {
+  if (isPinVerified) {
     // Sessão válida — permitir acesso
     return NextResponse.next()
   }
