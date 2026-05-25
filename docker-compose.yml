@@ -1,0 +1,49 @@
+# =============================================================================
+# docker-compose.yml — SPO (Sistema Pimenta Ousada)
+# ADR-004: Docker para portabilidade entre máquinas
+#
+# Uso:
+#   docker-compose up --build    # primeira vez (constrói a imagem)
+#   docker-compose up            # usos subsequentes
+#   docker-compose up -d         # em background (detached)
+#   docker-compose down          # parar (dados persistem no volume)
+#   docker-compose down -v       # parar E apagar todos os dados
+#   docker-compose logs -f       # ver logs em tempo real
+# =============================================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spo_app
+    ports:
+      - "3000:3000"
+    volumes:
+      # Volume persistente para o SQLite — dados sobrevivem a restarts e rebuilds
+      - spo_data:/app/data
+    environment:
+      # Banco: arquivo no volume persistente (fora do container filesystem)
+      - DATABASE_URL=file:/app/data/prod.db
+      # Segredo da sessão PIN — usar variável de ambiente ou o fallback de desenvolvimento
+      # IMPORTANTE: definir SESSION_SECRET no .env antes de usar em produção
+      - SESSION_SECRET=${SESSION_SECRET:-spo-secret-local-dev-32-chars-min!!}
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/auth/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  spo_data:
+    name: spo_inventory_data
+    # Para usar um diretório local em vez de volume Docker gerenciado,
+    # descomente as linhas abaixo (útil para backup fácil):
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: ./data

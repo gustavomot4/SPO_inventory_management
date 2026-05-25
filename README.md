@@ -48,6 +48,46 @@ npm run dev
 
 ---
 
+## Rodando com Docker
+
+**Pré-requisito:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e em execução.
+
+### Primeira vez
+
+```bash
+# Copiar o arquivo de variáveis de ambiente
+cp .env.example .env
+# Editar .env e definir SESSION_SECRET (mínimo 32 caracteres)
+
+# Construir a imagem e subir o sistema
+docker-compose up --build
+```
+
+Aguardar a mensagem `Iniciando servidor em http://localhost:3000` e abrir o navegador.
+
+### Usos subsequentes
+
+```bash
+docker-compose up          # inicia o sistema
+docker-compose up -d       # inicia em background
+docker-compose down        # para o sistema (dados persistem no volume)
+docker-compose down -v     # para o sistema E apaga todos os dados
+docker-compose logs -f     # ver logs em tempo real
+```
+
+### Dados e backup
+
+O banco SQLite fica no volume Docker `spo_inventory_data`. Para fazer backup:
+
+```bash
+# Copiar o banco para a pasta local
+docker cp spo_app:/app/data/prod.db ./backup-$(date +%Y%m%d).db
+```
+
+> **Nota:** Os dados persistem entre `docker-compose down` e `docker-compose up`. Apenas `docker-compose down -v` apaga os dados permanentemente.
+
+---
+
 ## Scripts disponíveis
 
 | Comando | Descrição |

@@ -1,0 +1,62 @@
+# =============================================================================
+# .dockerignore — SPO (Sistema Pimenta Ousada)
+# Exclui arquivos desnecessários da imagem Docker
+# Reduz tamanho do build context e evita vazar dados sensíveis
+# =============================================================================
+
+# Dependências e builds (serão reinstalados no Dockerfile)
+node_modules/
+.next/
+dist/
+build/
+
+# Banco de dados local (o Docker usa volume separado)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+dev.db
+prisma/dev.db
+data/
+
+# Variáveis de ambiente (nunca incluir na imagem!)
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Desenvolvimento e testes
+.eslintrc*
+*.test.ts
+*.spec.ts
+**/__tests__/
+jest.config.*
+vitest.config.*
+
+# Editores e IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Documentação do projeto (não necessária em produção)
+77777777_SPO_Project_DOCs/
+
+# Scripts de inicialização local (substituídos pelo Docker)
+iniciar.bat
+iniciar.sh

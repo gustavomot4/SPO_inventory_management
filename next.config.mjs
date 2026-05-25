@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Configurações mínimas para o MVP
-  // Arquivos estáticos e assets são servidos pelo Next.js por padrão
+  // output: 'standalone' gera um build auto-suficiente em .next/standalone/
+  // necessário para o Dockerfile multi-stage (ADR-004)
+  // inclui apenas dependências de produção — reduz significativamente o tamanho da imagem
+  output: 'standalone',
 }
 
 export default nextConfig

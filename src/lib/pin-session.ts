@@ -23,7 +23,9 @@ export interface PinSessionData {
 }
 
 // Augment do IronSession com os dados da sessão SPO
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 declare module 'iron-session' {
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   interface IronSessionData extends PinSessionData {}
 }
 
