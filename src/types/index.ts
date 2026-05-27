@@ -53,6 +53,72 @@ export type PaginationParams = {
 }
 
 // ---------------------------------------------------------------------------
-// PLACEHOLDER — Tipos específicos de domínio serão adicionados nas próximas tasks
-// Ex: tipos para criação de venda, filtros de relatório, etc.
+// CARD MACHINES — MAQU-001
 // ---------------------------------------------------------------------------
+
+export type CardMachineResponse = {
+  id: string
+  name: string
+  feeBasisPoints: number // ex: 199 = 1,99%
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// ---------------------------------------------------------------------------
+// CATEGORIES — PROD-001
+// ---------------------------------------------------------------------------
+
+export type CategoryResponse = {
+  id: string
+  name: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  _count?: { products: number } // incluído apenas em GET /api/categories/[id]
+}
+
+// ---------------------------------------------------------------------------
+// PRODUCTS + VARIATIONS — PROD-002
+// ---------------------------------------------------------------------------
+
+export type VariationResponse = {
+  id: string
+  sku: string
+  size: string
+  color: string
+  stockQuantity: number
+  minStock: number
+  isActive: boolean
+  isLowStock: boolean // calculado: stockQuantity > 0 && stockQuantity <= minStock
+  createdAt: string
+  updatedAt: string
+}
+
+export type ProductResponse = {
+  id: string
+  name: string
+  categoryId: string
+  categoryName: string
+  priceCents: number
+  isActive: boolean
+  deletedAt: string | null
+  variations: VariationResponse[]
+  createdAt: string
+  updatedAt: string
+}
+
+/** Usado na listagem paginada — sem array de variações para performance */
+export type ProductListItem = {
+  id: string
+  name: string
+  categoryId: string
+  categoryName: string
+  priceCents: number
+  isActive: boolean
+  variationCount: number
+  totalStock: number   // soma de stockQuantity das variações ativas
+  hasLowStock: boolean // true se alguma variação ativa está em alerta de estoque
+  createdAt: string
+  updatedAt: string
+}
