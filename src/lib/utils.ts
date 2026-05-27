@@ -7,6 +7,18 @@
 // =============================================================================
 
 // ---------------------------------------------------------------------------
+// cn() — Class Name helper (Frontend Agent — MVP-007 v2)
+// Combina clsx (lógica condicional) + tailwind-merge (resolve conflitos).
+// Usar em todos os componentes com classes condicionais.
+// ---------------------------------------------------------------------------
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+// ---------------------------------------------------------------------------
 // FORMATACAO DE MOEDA
 // Todos os valores monetarios no banco sao armazenados em CENTAVOS (Int).
 // Referencia: SCHEMA_DESIGN.md secao 2.1

@@ -1,6 +1,6 @@
 // =============================================================================
 // PinScreen.tsx — Lógica e UI da tela de PIN (Client Component)
-// SPO — Sistema Pimenta Ousada | MVP-007
+// SPO — Sistema Pimenta Ousada | MVP-007 v2
 // =============================================================================
 //
 // Separado de page.tsx para permitir Suspense wrapping no page.tsx
@@ -14,15 +14,30 @@
 //
 // Teclado numérico virtual:
 //   - Submissão automática ao digitar 6 dígitos
-//   - Botão "Confirmar" disponível com 4+ dígitos
+//   - Botão "OK" disponível com 4+ dígitos
 //   - Suporte a teclado físico (números + Backspace + Enter)
 //   - PIN exibido como bolinhas (● nunca mostra os números)
+//
+// Design (v2):
+//   - Flame como marca visual — sem emojis
+//   - Loader2 (animate-spin) substitui spinner manual
+//   - Delete para backspace — ícone semântico claro
+//   - ShieldCheck para estado sem PIN — positivo, não genérico
+//   - AlertCircle para erros — consistência com resto do sistema
 // =============================================================================
 
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import {
+  Flame,
+  Loader2,
+  Delete,
+  ShieldCheck,
+  AlertCircle,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/types'
 import type { AuthStatusResponse } from '@/app/api/auth/status/route'
 
@@ -38,11 +53,11 @@ const MAX_PIN_LENGTH = 6
 // ---------------------------------------------------------------------------
 
 type ScreenState =
-  | 'loading'    // verificando sessão
-  | 'no_pin'     // PIN não configurado → acesso livre
-  | 'input'      // aguardando digitação do PIN
-  | 'verifying'  // chamada POST em andamento
-  | 'redirecting' // POST bem-sucedido, aguardando redirect
+  | 'loading'      // verificando sessão
+  | 'no_pin'       // PIN não configurado → acesso livre
+  | 'input'        // aguardando digitação do PIN
+  | 'verifying'    // chamada POST em andamento
+  | 'redirecting'  // POST bem-sucedido, aguardando redirect
 
 // ---------------------------------------------------------------------------
 // Sub-componentes
@@ -51,16 +66,19 @@ type ScreenState =
 /** Exibe o PIN digitado como bolinhas */
 function PinDots({ length, filled }: { length: number; filled: number }) {
   return (
-    <div className="flex items-center justify-center gap-3 my-6" aria-label={`${filled} de ${length} dígitos digitados`}>
+    <div
+      className="flex items-center justify-center gap-3 my-6"
+      aria-label={`${filled} de ${length} dígitos digitados`}
+    >
       {Array.from({ length }).map((_, i) => (
         <div
           key={i}
-          className={[
-            'w-4 h-4 rounded-full border-2 transition-all duration-150',
+          className={cn(
+            'w-3.5 h-3.5 rounded-full border-2 transition-all duration-150',
             i < filled
               ? 'bg-brand-600 border-brand-600 scale-110'
-              : 'bg-transparent border-gray-300',
-          ].join(' ')}
+              : 'bg-transparent border-gray-300'
+          )}
           aria-hidden="true"
         />
       ))}
@@ -74,42 +92,45 @@ function PinKey({
   onClick,
   disabled,
   variant = 'digit',
+  isBackspace = false,
 }: {
   label: string
   onClick: () => void
   disabled: boolean
   variant?: 'digit' | 'action' | 'backspace'
+  isBackspace?: boolean
 }) {
-  const base = 'flex items-center justify-center rounded-xl text-lg font-semibold transition-all active:scale-95 min-h-[3.5rem] min-w-[4rem] select-none'
-
-  const styles: Record<string, string> = {
-    digit:     'bg-white border border-gray-200 text-gray-800 hover:bg-brand-50 hover:border-brand-200 hover:text-brand-700 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed',
-    action:    'bg-brand-600 text-white hover:bg-brand-700 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed',
-    backspace: 'bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed',
-  }
-
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`${base} ${styles[variant]}`}
-      aria-label={variant === 'backspace' ? 'Apagar último dígito' : label}
+      aria-label={isBackspace ? 'Apagar último dígito' : label}
+      className={cn(
+        'flex items-center justify-center rounded-xl text-sm font-semibold',
+        'transition-all active:scale-95 min-h-[3.5rem] select-none',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        variant === 'digit' &&
+          'bg-white border border-gray-200 text-gray-800 shadow-sm',
+        variant === 'digit' && !disabled &&
+          'hover:bg-brand-50 hover:border-brand-200 hover:text-brand-700',
+        variant === 'action' &&
+          'bg-brand-600 text-white shadow-sm',
+        variant === 'action' && !disabled &&
+          'hover:bg-brand-700',
+        variant === 'backspace' &&
+          'bg-gray-100 text-gray-600',
+        variant === 'backspace' && !disabled &&
+          'hover:bg-gray-200',
+        disabled && 'opacity-40 cursor-not-allowed'
+      )}
     >
-      {label}
+      {isBackspace ? (
+        <Delete className="h-4 w-4" aria-hidden="true" strokeWidth={2} />
+      ) : (
+        <span className="text-base">{label}</span>
+      )}
     </button>
-  )
-}
-
-/** Spinner de carregamento */
-function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
-  const sizes = { sm: 'w-4 h-4', md: 'w-6 h-6', lg: 'w-10 h-10' }
-  return (
-    <div
-      className={`${sizes[size]} border-2 border-brand-200 border-t-brand-600 rounded-full animate-spin`}
-      role="status"
-      aria-label="Carregando"
-    />
   )
 }
 
@@ -173,9 +194,10 @@ export function PinScreen() {
       }
 
       const json: ApiResponse<never> = await res.json()
-      const msg = 'error' in json && json.error === 'PIN incorreto'
-        ? 'PIN incorreto. Tente novamente.'
-        : 'Não foi possível verificar o PIN. Tente novamente.'
+      const msg =
+        'error' in json && json.error === 'PIN incorreto'
+          ? 'PIN incorreto. Tente novamente.'
+          : 'Não foi possível verificar o PIN. Tente novamente.'
 
       setErrorMsg(msg)
       setPin('')
@@ -208,20 +230,22 @@ export function PinScreen() {
   }, [router, redirectTo])
 
   // ── Digitar um número ──
-  const handleDigit = useCallback((digit: string) => {
-    if (screenState !== 'input') return
+  const handleDigit = useCallback(
+    (digit: string) => {
+      if (screenState !== 'input') return
 
-    setPin((prev) => {
-      if (prev.length >= MAX_PIN_LENGTH) return prev
-      const next = prev + digit
-      if (next.length === MAX_PIN_LENGTH) {
-        // Auto-submit ao completar o PIN máximo
-        setTimeout(() => submitPin(next), 80)
-      }
-      return next
-    })
-    setErrorMsg('')
-  }, [screenState, submitPin])
+      setPin((prev) => {
+        if (prev.length >= MAX_PIN_LENGTH) return prev
+        const next = prev + digit
+        if (next.length === MAX_PIN_LENGTH) {
+          setTimeout(() => submitPin(next), 80)
+        }
+        return next
+      })
+      setErrorMsg('')
+    },
+    [screenState, submitPin]
+  )
 
   // ── Apagar último dígito ──
   const handleBackspace = useCallback(() => {
@@ -259,27 +283,33 @@ export function PinScreen() {
 
   const isDisabled = screenState === 'verifying' || screenState === 'redirecting'
 
-  // Layout base: tela cheia centralizada, sem sidebar
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-10">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-10">
 
-      {/* Card principal */}
+      {/* ── Card principal ── */}
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
 
         {/* Cabeçalho */}
-        <div className="px-8 pt-8 pb-4 text-center border-b border-gray-100">
-          <div className="text-4xl mb-3" aria-hidden="true">🌶️</div>
-          <h1 className="text-xl font-bold text-gray-800">Pimenta Ousada</h1>
+        <div className="px-8 pt-8 pb-5 text-center border-b border-gray-100">
+          {/*
+           * Decisão de design: Flame em container brand-50 substitui emoji 🌶️.
+           * Mesmo padrão do SidebarContent — identidade visual consistente.
+           */}
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-brand-50 mb-4">
+            <Flame className="h-6 w-6 text-brand-700" aria-hidden="true" strokeWidth={2.5} />
+          </div>
 
-          {screenState === 'loading' || screenState === 'redirecting' ? (
-            <p className="text-sm text-gray-400 mt-1">Verificando acesso…</p>
-          ) : screenState === 'no_pin' ? (
-            <p className="text-sm text-gray-500 mt-1">Nenhum PIN configurado</p>
-          ) : (
-            <p className="text-sm text-gray-500 mt-1">
-              Digite o PIN para acessar
-            </p>
-          )}
+          <h1 className="text-lg font-bold tracking-tight text-gray-900">
+            Pimenta Ousada
+          </h1>
+
+          <p className="text-sm text-muted-foreground mt-1">
+            {screenState === 'loading' || screenState === 'redirecting'
+              ? 'Verificando acesso…'
+              : screenState === 'no_pin'
+              ? 'Nenhum PIN configurado'
+              : 'Digite o PIN para acessar'}
+          </p>
         </div>
 
         {/* Corpo */}
@@ -287,9 +317,12 @@ export function PinScreen() {
 
           {/* ── Estado: carregando / redirecionando ── */}
           {(screenState === 'loading' || screenState === 'redirecting') && (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <Spinner size="lg" />
-              <p className="text-sm text-gray-400">
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2
+                className="h-8 w-8 text-brand-600 animate-spin"
+                aria-hidden="true"
+              />
+              <p className="text-sm text-muted-foreground" role="status">
                 {screenState === 'loading' ? 'Verificando sessão…' : 'Entrando…'}
               </p>
             </div>
@@ -299,13 +332,21 @@ export function PinScreen() {
           {screenState === 'no_pin' && (
             <div className="flex flex-col items-center gap-5 py-4">
               <div className="text-center">
+                {/*
+                 * ShieldCheck: transmite "acesso liberado / sem bloqueio"
+                 * Cor green-600 para diferenciação semântica (positivo).
+                 */}
                 <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-50 mb-3">
-                  <span className="text-2xl" aria-hidden="true">✅</span>
+                  <ShieldCheck
+                    className="h-7 w-7 text-green-600"
+                    aria-hidden="true"
+                    strokeWidth={1.5}
+                  />
                 </div>
                 <p className="text-sm font-medium text-gray-700">
                   Nenhum PIN configurado.
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Acesso livre a todas as áreas.
                 </p>
               </div>
@@ -313,14 +354,21 @@ export function PinScreen() {
                 type="button"
                 onClick={handleFreeAccess}
                 disabled={isDisabled}
-                className="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className={cn(
+                  'w-full py-3 px-4 text-sm font-semibold rounded-xl transition-colors',
+                  'bg-brand-600 text-white hover:bg-brand-700',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'flex items-center justify-center gap-2'
+                )}
               >
                 {isDisabled ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Spinner size="sm" /> Entrando…
-                  </span>
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Entrando…
+                  </>
                 ) : (
-                  'Continuar →'
+                  'Continuar'
                 )}
               </button>
             </div>
@@ -336,8 +384,8 @@ export function PinScreen() {
                   aria-live="assertive"
                   className="mb-4 flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5"
                 >
-                  <span aria-hidden="true">⚠️</span>
-                  {errorMsg}
+                  <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" strokeWidth={2} />
+                  <span>{errorMsg}</span>
                 </div>
               )}
 
@@ -347,7 +395,7 @@ export function PinScreen() {
               {/* Verificando... */}
               {screenState === 'verifying' && (
                 <div className="flex items-center justify-center gap-2 mb-4 text-sm text-brand-600">
-                  <Spinner size="sm" />
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                   <span>Verificando…</span>
                 </div>
               )}
@@ -358,7 +406,6 @@ export function PinScreen() {
                 role="group"
                 aria-label="Teclado numérico"
               >
-                {/* Linha 1: 1 2 3 */}
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
                   <PinKey
                     key={d}
@@ -368,12 +415,13 @@ export function PinScreen() {
                   />
                 ))}
 
-                {/* Linha 4: ← 0 ✓ */}
+                {/* Linha 4: ← 0 OK */}
                 <PinKey
-                  label="⌫"
+                  label="del"
                   onClick={handleBackspace}
                   disabled={isDisabled || pin.length === 0}
                   variant="backspace"
+                  isBackspace
                 />
                 <PinKey
                   label="0"
@@ -389,7 +437,7 @@ export function PinScreen() {
               </div>
 
               {/* Dica de teclado físico */}
-              <p className="text-center text-xs text-gray-400 mt-4">
+              <p className="text-center text-xs text-muted-foreground mt-4">
                 Você também pode usar o teclado físico
               </p>
             </>
@@ -398,7 +446,7 @@ export function PinScreen() {
       </div>
 
       {/* Rodapé */}
-      <p className="mt-6 text-xs text-gray-400">
+      <p className="mt-6 text-xs text-muted-foreground">
         v0.1.0-MVP · Pimenta Ousada
       </p>
     </div>

@@ -1,149 +1,124 @@
 // =============================================================================
-// AppShell.tsx — Wrapper interativo do layout (Client Component)
-// SPO — Sistema Pimenta Ousada | MVP-007
+// AppShell.tsx — Wrapper de layout responsivo (Client Component)
+// SPO — Sistema Pimenta Ousada | MVP-007 v2
 // =============================================================================
 //
-// Necessita 'use client' apenas para controlar abertura/fechamento do sidebar
-// no mobile. O conteúdo do sidebar é passado como ReactNode vindo de um
-// Server Component (SidebarContent), mantendo o Server Component tree intacto.
+// 'use client' necessário para useState (toggle mobile) e useEffect (Escape).
+// O conteúdo do sidebar vem como ReactNode de um Server Component —
+// padrão recomendado pelo Next.js App Router para preservar o Server tree.
 //
 // Layout:
-//   - Desktop (lg+): sidebar fixo à esquerda (256px) + conteúdo principal
-//   - Mobile: barra superior com hamburger → sidebar desliza como overlay
+//   Desktop (lg+): sidebar fixo 256px à esquerda + área de conteúdo flex-1
+//   Mobile:        header top com botão Menu → sidebar como overlay com backdrop
+//
+// Design (v2):
+//   - Menu (Lucide) e X (Lucide) como ícones de toggle — sem emojis
+//   - Flame (Lucide) no header mobile para manter identidade visual
+//   - Backdrop semitransparente no mobile com transição suave
 // =============================================================================
 
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Menu, X, Flame } from 'lucide-react'
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 interface AppShellProps {
   children: React.ReactNode
   sidebar: React.ReactNode
 }
 
-// Ícone de menu hambúrguer
-function MenuIcon() {
-  return (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-      />
-    </svg>
-  )
-}
-
-// Ícone de fechar (X)
-function CloseIcon() {
-  return (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M6 18L18 6M6 6l12 12"
-      />
-    </svg>
-  )
-}
+// ---------------------------------------------------------------------------
+// Componente
+// ---------------------------------------------------------------------------
 
 export function AppShell({ children, sidebar }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  // Fechar sidebar ao apertar Escape
-  const handleEscape = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape' && mobileOpen) {
-      setMobileOpen(false)
-    }
-  }, [mobileOpen])
+  // Fechar ao pressionar Escape
+  const handleEscape = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mobileOpen) setMobileOpen(false)
+    },
+    [mobileOpen]
+  )
 
   useEffect(() => {
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
   }, [handleEscape])
 
-  // Travar scroll do body quando sidebar mobile está aberto
+  // Travar scroll do body quando sidebar mobile está visível
   useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
+    document.body.style.overflow = mobileOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
   }, [mobileOpen])
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-background">
 
-      {/* ── OVERLAY MOBILE ── */}
+      {/* ── Backdrop mobile ── */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+          className="fixed inset-0 z-30 bg-gray-900/40 backdrop-blur-sm lg:hidden"
           onClick={() => setMobileOpen(false)}
           aria-hidden="true"
         />
       )}
 
-      {/* ── SIDEBAR ── */}
-      {/* Desktop: sempre visível; Mobile: desliza via translate */}
+      {/* ── Sidebar ── */}
       <aside
         id="main-sidebar"
         className={[
-          'fixed top-0 left-0 z-40 h-full w-64 transition-transform duration-200 ease-in-out',
-          'lg:static lg:z-auto lg:h-auto lg:translate-x-0 lg:transition-none',
+          // Desktop: estático, sempre visível
+          'lg:static lg:z-auto lg:h-auto lg:translate-x-0 lg:w-64 lg:shrink-0',
+          // Mobile: fixo, desliza via translate
+          'fixed inset-y-0 left-0 z-40 w-64 transition-transform duration-200 ease-in-out lg:transition-none',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         ].join(' ')}
         aria-label="Menu lateral"
       >
-        {/* Botão fechar — visível apenas no mobile */}
+        {/* Botão fechar — só no mobile */}
         <button
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors lg:hidden"
+          className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors lg:hidden"
           onClick={() => setMobileOpen(false)}
           aria-label="Fechar menu"
+          type="button"
         >
-          <CloseIcon />
+          <X className="h-4 w-4" aria-hidden="true" />
         </button>
 
-        {/* Conteúdo do sidebar (vem como Server Component prop) */}
-        <div className="h-full">
-          {sidebar}
-        </div>
+        <div className="h-full">{sidebar}</div>
       </aside>
 
-      {/* ── ÁREA DE CONTEÚDO ── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* ── Área de conteúdo ── */}
+      <div className="flex min-w-0 flex-1 flex-col">
 
-        {/* Barra superior mobile */}
-        <header className="lg:hidden sticky top-0 z-20 flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
+        {/* Header mobile */}
+        <header className="no-print sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 lg:hidden">
           <button
             onClick={() => setMobileOpen(true)}
-            className="p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+            className="flex h-9 w-9 -ml-1 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
             aria-label="Abrir menu de navegação"
             aria-expanded={mobileOpen}
             aria-controls="main-sidebar"
+            type="button"
           >
-            <MenuIcon />
+            <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
 
-          <span className="text-sm font-bold text-brand-700">
-            🌶️ Pimenta Ousada
-          </span>
+          {/* Marca no header mobile */}
+          <div className="flex items-center gap-2">
+            <Flame className="h-4 w-4 text-brand-700" aria-hidden="true" strokeWidth={2.5} />
+            <span className="text-sm font-bold tracking-tight text-gray-900">
+              Pimenta Ousada
+            </span>
+          </div>
 
-          {/* Espaçador para centralizar o título */}
+          {/* Espaçador para centralizar a marca */}
           <div className="w-9" aria-hidden="true" />
         </header>
 

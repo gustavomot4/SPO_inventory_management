@@ -2,10 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Variáveis CSS globais */
+/*
+ * ── CSS Variables — Design Tokens ──────────────────────────────────────────
+ * Adicionados em MVP-007 v2 (Frontend Agent v2.0).
+ * Mapeiam os tokens semânticos do tailwind.config.ts para valores HSL.
+ * brand-600 (#db2777) = hsl(336, 71%, 51%) — cor de ação principal.
+ * NÃO modificar as regras @media print abaixo — usadas na comanda térmica.
+ */
+@layer base {
+  :root {
+    /* Superfícies */
+    --background: 210 20% 98%;          /* ~gray-50  */
+    --foreground: 222 47% 11%;          /* ~gray-900 */
+
+    /* Ação principal — brand-600 (#db2777) */
+    --primary:            336 71% 51%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secundário — brand-50 tint */
+    --secondary:            325 73% 96%;
+    --secondary-foreground: 336 74% 42%; /* brand-700 */
+
+    /* Neutros / silenciados */
+    --muted:            220 14% 96%;    /* ~gray-100 */
+    --muted-foreground: 215 16% 47%;    /* ~gray-500 */
+
+    /* Accent = brand-50 (hover, seleção suave) */
+    --accent:            325 73% 96%;
+    --accent-foreground: 336 74% 42%;
+
+    /* Destrutivo — red-600 */
+    --destructive:            0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Bordas e inputs */
+    --border: 214 32% 91%;              /* ~gray-200 */
+    --input:  214 32% 91%;
+    --ring:   336 71% 51%;              /* brand-600 — focus ring */
+
+    /* Border radius base */
+    --radius: 0.5rem;
+  }
+}
+
+/* Variáveis legadas — mantidas para compatibilidade com código existente */
 :root {
   --foreground-rgb: 17, 24, 39;       /* gray-900 */
-  --background-rgb: 249, 250, 251;    /* gray-50 */
+  --background-rgb: 249, 250, 251;    /* gray-50  */
 }
 
 /* Reset básico e defaults */
