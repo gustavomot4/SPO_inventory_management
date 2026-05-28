@@ -4,6 +4,17 @@
 // =============================================================================
 
 // ---------------------------------------------------------------------------
+// CLASS MERGE — clsx + tailwind-merge
+// ---------------------------------------------------------------------------
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+/** Merge de classes Tailwind sem conflitos. */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+// ---------------------------------------------------------------------------
 // FORMATAÇÃO DE MOEDA
 // Todos os valores monetários no banco são armazenados em CENTAVOS (Int).
 // Referência: SCHEMA_DESIGN.md seção 2.1
@@ -124,4 +135,39 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   PIX: 'Pix',
   DEBIT_CARD: 'Cartão de Débito',
   CREDIT_CARD: 'Cartão de Crédito',
+}
+
+// ---------------------------------------------------------------------------
+// FORMATAÇÃO DE BASIS POINTS (taxas de maquininha)
+// 199 basis points = 1,99%
+// ---------------------------------------------------------------------------
+
+/**
+ * Converte basis points (Int) para string de percentual formatada em pt-BR.
+ *
+ * @example
+ * formatBasisPoints(199)  // → "1,99%"
+ * formatBasisPoints(250)  // → "2,50%"
+ */
+export function formatBasisPoints(basisPoints: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'percent',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(basisPoints / 10000)
+}
+
+/**
+ * Converte string de percentual para basis points.
+ * Aceita vírgula ou ponto como separador decimal.
+ *
+ * @example
+ * parseBasisPoints("1,99")  // → 199
+ * parseBasisPoints("2.50")  // → 250
+ */
+export function parseBasisPoints(value: string): number {
+  const normalized = value.trim().replace(',', '.')
+  const parsed = parseFloat(normalized)
+  if (isNaN(parsed)) throw new Error(`Taxa inválida: "${value}"`)
+  return Math.round(parsed * 100)
 }
