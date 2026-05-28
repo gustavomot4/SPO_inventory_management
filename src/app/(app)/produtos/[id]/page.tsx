@@ -1,0 +1,643 @@
+// =============================================================================
+// produtos/[id]/page.tsx — Detalhe e edição de produto (PROD-005)
+// SPO — Sistema Pimenta Ousada
+// =============================================================================
+//
+// 'use client': carrega produto, edita campos, gerencia variações existentes.
+//
+// Operações disponíveis:
+//   - PATCH /api/products/[id]                           → editar produto
+//   - POST  /api/products/[id]/variations                → adicionar variação
+//   - PATCH /api/products/[id]/variations/[varId]        → editar minStock
+//   - DELETE /api/products/[id]/variations/[varId]       → inativar variação
+//   - DELETE /api/products/[id]                          → inativar produto
+// =============================================================================
+
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Loader2,
+  AlertTriangle,
+} from 'lucide-react'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
+import { Badge } from '@/components/ui/Badge'
+import {
+  cn,
+  formatCurrency,
+  formatDate,
+  parseCurrencyToCents,
+} from '@/lib/utils'
+import type {
+  ProductResponse,
+  VariationResponse,
+  CategoryResponse,
+  ApiResponse,
+} from '@/types'
+
+// ---------------------------------------------------------------------------
+// Tipos locais
+// ---------------------------------------------------------------------------
+
+interface ProductFormErrors {
+  name?: string
+  categoryId?: string
+  priceCents?: string
+  general?: string
+}
+
+interface NewVariationDraft {
+  size: string
+  color: string
+  sku: string
+  minStock: string
+  errors: { size?: string; color?: string; general?: string }
+}
+
+// ---------------------------------------------------------------------------
+// Sub-componente: linha de variação existente
+// ---------------------------------------------------------------------------
+
+interface VariationRowProps {
+  variation: VariationResponse
+  productId: string
+  onUpdate: (varId: string, minStock: number) => Promise<string | null>
+  onDeactivate: (varId: string) => Promise<void>
+}
+
+function VariationRow({ variation, onUpdate, onDeactivate }: VariationRowProps) {
+  const [editingMin, setEditingMin] = useState(false)
+  const [minValue, setMinValue] = useState(String(variation.minStock))
+  const [saving, setSaving] = useState(false)
+  const [deactivating, setDeactivating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSaveMin() {
+    const val = parseInt(minValue, 10)
+    if (isNaN(val) || val < 0) { setError('Valor inválido'); return }
+    setSaving(true)
+    const err = await onUpdate(variation.id, val)
+    setSaving(false)
+    if (err) { setError(err); return }
+    setEditingMin(false)
+    setError(null)
+  }
+
+  async function handleDeactivate() {
+    setDeactivating(true)
+    await onDeactivate(variation.id)
+    setDeactivating(false)
+  }
+
+  const stockBadge = variation.stockQuantity === 0
+    ? <Badge variant="danger">Zerado</Badge>
+    : variation.isLowStock
+    ? <Badge variant="warning">Baixo</Badge>
+    : <Badge variant="success">OK</Badge>
+
+  return (
+    <div className={cn(
+      'border-b border-border last:border-0 px-6 py-3',
+      'flex flex-wrap items-center gap-3 text-sm',
+      !variation.isActive && 'opacity-50'
+    )}>
+      {/* SKU + Tamanho + Cor */}
+      <div className="flex-1 min-w-0">
+        <p className="font-mono text-xs text-muted-foreground">{variation.sku}</p>
+        <p className="text-sm font-medium text-foreground mt-0.5">
+          {variation.size} · {variation.color}
+        </p>
+      </div>
+
+      {/* Estoque */}
+      <div className="text-right shrink-0 w-20">
+        <p className="text-sm text-foreground">{variation.stockQuantity} un.</p>
+        {stockBadge}
+      </div>
+
+      {/* Est. mínimo — editável */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {editingMin ? (
+          <>
+            <input
+              type="number"
+              value={minValue}
+              onChange={e => setMinValue(e.target.value)}
+              className={cn(
+                'w-16 rounded border border-input bg-background px-2 py-1 text-sm',
+                'focus:outline-none focus:ring-1 focus:ring-ring',
+                error && 'border-destructive'
+              )}
+              min={0}
+              autoFocus
+            />
+            <Button size="sm" loading={saving} onClick={handleSaveMin}>
+              OK
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setEditingMin(false); setMinValue(String(variation.minStock)); setError(null) }}
+            >
+              ✕
+            </Button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => variation.isActive && setEditingMin(true)}
+            disabled={!variation.isActive}
+            className={cn(
+              'text-xs text-muted-foreground border border-dashed border-border rounded px-2 py-1',
+              variation.isActive && 'hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer'
+            )}
+            title="Editar estoque mínimo"
+          >
+            Mín: {variation.minStock}
+          </button>
+        )}
+      </div>
+
+      {/* Status + Inativar */}
+      <div className="flex items-center gap-2 shrink-0">
+        {!variation.isActive && (
+          <Badge variant="muted">Inativa</Badge>
+        )}
+        {variation.isActive && (
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={deactivating}
+            onClick={handleDeactivate}
+            className="text-muted-foreground hover:text-destructive"
+            aria-label={`Inativar variação ${variation.sku}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+      {error && (
+        <p className="w-full text-xs text-destructive -mt-1">{error}</p>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Página principal
+// ---------------------------------------------------------------------------
+
+export default function ProdutoDetalhePage() {
+  const params = useParams<{ id: string }>()
+  const router = useRouter()
+  const productId = params.id
+
+  const [product, setProduct] = useState<ProductResponse | null>(null)
+  const [categories, setCategories] = useState<CategoryResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
+
+  // Campos editáveis do produto
+  const [name, setName] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [priceInput, setPriceInput] = useState('')
+  const [formErrors, setFormErrors] = useState<ProductFormErrors>({})
+  const [savingProduct, setSavingProduct] = useState(false)
+  const [savedProduct, setSavedProduct] = useState(false)
+
+  // Nova variação
+  const [showAddVar, setShowAddVar] = useState(false)
+  const [newVar, setNewVar] = useState<NewVariationDraft>({
+    size: '', color: '', sku: '', minStock: '2', errors: {},
+  })
+  const [addingVar, setAddingVar] = useState(false)
+
+  // Inativar produto
+  const [deletingProduct, setDeletingProduct] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // ── Carregar produto e categorias ──
+  const loadProduct = useCallback(async () => {
+    try {
+      const [prodRes, catRes] = await Promise.all([
+        fetch(`/api/products/${productId}`, { cache: 'no-store' }),
+        fetch('/api/categories'),
+      ])
+
+      if (prodRes.status === 404) { setNotFound(true); return }
+
+      const [prodJson, catJson]: [ApiResponse<ProductResponse>, ApiResponse<CategoryResponse[]>] =
+        await Promise.all([prodRes.json(), catRes.json()])
+
+      if ('data' in prodJson) {
+        const p = prodJson.data
+        setProduct(p)
+        setName(p.name)
+        setCategoryId(p.categoryId)
+        setPriceInput((p.priceCents / 100).toFixed(2).replace('.', ','))
+      }
+      if ('data' in catJson) setCategories(catJson.data)
+    } catch {
+      setNotFound(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [productId])
+
+  useEffect(() => { loadProduct() }, [loadProduct])
+
+  // ── Salvar produto ──
+  async function handleSaveProduct() {
+    const errs: ProductFormErrors = {}
+    if (!name.trim()) errs.name = 'Nome obrigatório'
+    if (name.trim().length > 120) errs.name = 'Máximo 120 caracteres'
+    if (!categoryId) errs.categoryId = 'Selecione uma categoria'
+    if (!priceInput.trim()) {
+      errs.priceCents = 'Preço obrigatório'
+    } else {
+      try { parseCurrencyToCents(priceInput) }
+      catch { errs.priceCents = 'Preço inválido (ex: 59,90)' }
+    }
+    setFormErrors(errs)
+    if (Object.keys(errs).length > 0) return
+
+    setSavingProduct(true)
+    try {
+      const res = await fetch(`/api/products/${productId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          categoryId,
+          priceCents: parseCurrencyToCents(priceInput),
+        }),
+      })
+      const json: ApiResponse<ProductResponse> = await res.json()
+
+      if (!res.ok) {
+        const code = 'code' in json ? (json as { code?: string }).code : undefined
+        if (code === 'NAME_TAKEN') setFormErrors({ name: 'Já existe um produto com este nome' })
+        else if (code === 'CATEGORY_NOT_FOUND') setFormErrors({ categoryId: 'Categoria não encontrada' })
+        else setFormErrors({ general: 'error' in json ? json.error : 'Erro ao salvar' })
+        return
+      }
+      if ('data' in json) setProduct(json.data)
+      setSavedProduct(true)
+      setTimeout(() => setSavedProduct(false), 2500)
+    } catch {
+      setFormErrors({ general: 'Erro de conexão. Tente novamente.' })
+    } finally {
+      setSavingProduct(false)
+    }
+  }
+
+  // ── Atualizar minStock de variação ──
+  async function handleUpdateVariation(varId: string, minStock: number): Promise<string | null> {
+    try {
+      const res = await fetch(`/api/products/${productId}/variations/${varId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minStock }),
+      })
+      const json: ApiResponse<VariationResponse> = await res.json()
+      if (!res.ok) return 'error' in json ? json.error : 'Erro ao salvar'
+      if ('data' in json) {
+        setProduct(prev =>
+          prev
+            ? { ...prev, variations: prev.variations.map(v => v.id === varId ? json.data : v) }
+            : prev
+        )
+      }
+      return null
+    } catch {
+      return 'Erro de conexão.'
+    }
+  }
+
+  // ── Inativar variação ──
+  async function handleDeactivateVariation(varId: string) {
+    try {
+      await fetch(`/api/products/${productId}/variations/${varId}`, { method: 'DELETE' })
+      setProduct(prev =>
+        prev
+          ? { ...prev, variations: prev.variations.map(v => v.id === varId ? { ...v, isActive: false } : v) }
+          : prev
+      )
+    } catch { /* silencioso */ }
+  }
+
+  // ── Adicionar variação ──
+  async function handleAddVariation() {
+    const errs: NewVariationDraft['errors'] = {}
+    if (!newVar.size.trim()) errs.size = 'Obrigatório'
+    if (!newVar.color.trim()) errs.color = 'Obrigatório'
+    setNewVar(p => ({ ...p, errors: errs }))
+    if (Object.keys(errs).length > 0) return
+
+    setAddingVar(true)
+    try {
+      const res = await fetch(`/api/products/${productId}/variations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          size: newVar.size.trim(),
+          color: newVar.color.trim(),
+          ...(newVar.sku.trim() ? { sku: newVar.sku.trim() } : {}),
+          minStock: parseInt(newVar.minStock || '2', 10),
+        }),
+      })
+      const json: ApiResponse<VariationResponse> = await res.json()
+      if (!res.ok) {
+        const code = 'code' in json ? (json as { code?: string }).code : undefined
+        const msg = code === 'DUPLICATE_VARIATION'
+          ? 'Já existe uma variação com este tamanho e cor'
+          : code === 'SKU_TAKEN'
+          ? 'Este SKU já está em uso'
+          : 'error' in json ? json.error : 'Erro ao adicionar'
+        setNewVar(p => ({ ...p, errors: { general: msg } }))
+        return
+      }
+      if ('data' in json) {
+        setProduct(prev =>
+          prev ? { ...prev, variations: [...prev.variations, json.data] } : prev
+        )
+        setNewVar({ size: '', color: '', sku: '', minStock: '2', errors: {} })
+        setShowAddVar(false)
+      }
+    } catch {
+      setNewVar(p => ({ ...p, errors: { general: 'Erro de conexão.' } }))
+    } finally {
+      setAddingVar(false)
+    }
+  }
+
+  // ── Inativar produto ──
+  async function handleDeleteProduct() {
+    setDeletingProduct(true)
+    try {
+      await fetch(`/api/products/${productId}`, { method: 'DELETE' })
+      router.replace('/produtos')
+    } catch {
+      setDeletingProduct(false)
+      setConfirmDelete(false)
+    }
+  }
+
+  // ── Loading / Not Found ──
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-6 w-6 text-brand-600 animate-spin" />
+      </div>
+    )
+  }
+
+  if (notFound || !product) {
+    return (
+      <div className="px-4 py-16 text-center">
+        <p className="text-sm font-medium text-foreground">Produto não encontrado</p>
+        <Link href="/produtos">
+          <Button variant="secondary" className="mt-4">Voltar para Produtos</Button>
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-4 py-7 sm:px-6 lg:px-8 max-w-3xl mx-auto">
+
+      {/* Cabeçalho */}
+      <div className="flex items-start gap-3 mb-8">
+        <Link
+          href="/produtos"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted transition-colors mt-0.5"
+          aria-label="Voltar para produtos"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground truncate">
+              {product.name}
+            </h1>
+            <Badge variant={product.isActive ? 'success' : 'muted'}>
+              {product.isActive ? 'Ativa' : 'Inativa'}
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Cadastrado em {formatDate(new Date(product.createdAt))}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Dados do produto ── */}
+      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden mb-5">
+        <div className="px-6 py-4 border-b border-border">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            Dados do Produto
+          </p>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <Input
+            label="Nome do produto"
+            value={name}
+            onChange={e => { setName(e.target.value); setFormErrors(p => ({ ...p, name: undefined })) }}
+            error={formErrors.name}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="Categoria"
+              value={categoryId}
+              onChange={e => { setCategoryId(e.target.value); setFormErrors(p => ({ ...p, categoryId: undefined })) }}
+              error={formErrors.categoryId}
+              options={categories.map(c => ({ value: c.id, label: c.name }))}
+            />
+            <Input
+              label="Preço de venda (R$)"
+              value={priceInput}
+              onChange={e => { setPriceInput(e.target.value); setFormErrors(p => ({ ...p, priceCents: undefined })) }}
+              error={formErrors.priceCents}
+              hint={(() => {
+                try { return formatCurrency(parseCurrencyToCents(priceInput)) } catch { return '' }
+              })()}
+            />
+          </div>
+
+          {formErrors.general && (
+            <p className="text-sm text-destructive">{formErrors.general}</p>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleSaveProduct}
+              loading={savingProduct}
+            >
+              {savedProduct ? '✓ Salvo' : 'Salvar alterações'}
+            </Button>
+            {savedProduct && (
+              <p className="text-sm text-green-600">Alterações salvas</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Variações ── */}
+      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden mb-5">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            Variações ({product.variations.filter(v => v.isActive).length} ativas)
+          </p>
+          {!showAddVar && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setShowAddVar(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Adicionar
+            </Button>
+          )}
+        </div>
+
+        {/* Formulário nova variação */}
+        {showAddVar && (
+          <div className="px-6 py-4 border-b border-border bg-brand-50/30">
+            <p className="text-xs font-medium text-foreground mb-3">Nova variação</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Input
+                placeholder="Tamanho"
+                value={newVar.size}
+                onChange={e => setNewVar(p => ({ ...p, size: e.target.value, errors: { ...p.errors, size: undefined } }))}
+                error={newVar.errors.size}
+                autoFocus
+              />
+              <Input
+                placeholder="Cor"
+                value={newVar.color}
+                onChange={e => setNewVar(p => ({ ...p, color: e.target.value, errors: { ...p.errors, color: undefined } }))}
+                error={newVar.errors.color}
+              />
+              <Input
+                placeholder="SKU (auto)"
+                value={newVar.sku}
+                onChange={e => setNewVar(p => ({ ...p, sku: e.target.value }))}
+              />
+              <Input
+                type="number"
+                placeholder="Mín."
+                value={newVar.minStock}
+                onChange={e => setNewVar(p => ({ ...p, minStock: e.target.value }))}
+                min={0}
+              />
+            </div>
+            {newVar.errors.general && (
+              <p className="mt-2 text-xs text-destructive">{newVar.errors.general}</p>
+            )}
+            <div className="flex items-center gap-2 mt-3">
+              <Button size="sm" onClick={handleAddVariation} loading={addingVar}>
+                Adicionar variação
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => { setShowAddVar(false); setNewVar({ size: '', color: '', sku: '', minStock: '2', errors: {} }) }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Lista de variações */}
+        {product.variations.length === 0 ? (
+          <div className="px-6 py-8 text-center">
+            <p className="text-sm text-muted-foreground">Nenhuma variação cadastrada.</p>
+          </div>
+        ) : (
+          <>
+            {/* Cabeçalho */}
+            <div className="hidden sm:flex items-center gap-3 px-6 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+              <span className="flex-1">SKU / Tamanho · Cor</span>
+              <span className="w-20 text-right">Estoque</span>
+              <span className="w-24">Est. mínimo</span>
+              <span className="w-20"></span>
+            </div>
+            {product.variations.map(v => (
+              <VariationRow
+                key={v.id}
+                variation={v}
+                productId={productId}
+                onUpdate={handleUpdateVariation}
+                onDeactivate={handleDeactivateVariation}
+              />
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* ── Zona de perigo ── */}
+      {product.isActive && (
+        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-border">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              Zona de Perigo
+            </p>
+          </div>
+          <div className="px-6 py-5">
+            {!confirmDelete ? (
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Inativar produto</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    O produto e todas as suas variações serão ocultados do catálogo.
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  Inativar
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" aria-hidden="true" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    Tem certeza? Esta ação oculta o produto do catálogo.
+                  </p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      loading={deletingProduct}
+                      onClick={handleDeleteProduct}
+                    >
+                      Sim, inativar
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
