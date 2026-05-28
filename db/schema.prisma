@@ -1,12 +1,11 @@
 // =============================================================================
 // PRISMA SCHEMA — SPO (Sistema Pimenta Ousada)
-// Database Agent | MVP-004 + DT-004 + DT-005 | 2026-05-27
-// Versão: 2.2 — Enums convertidos para String (SQLite + Prisma 5.x não suporta enum)
+// Database Agent | MVP-004 + DT-004 + DT-005 + DT-007 + PROD-007 | 2026-05-28
+// Versão: 2.3
 // =============================================================================
 //
 // Stack: Next.js 14+ + Prisma ORM + SQLite (MVP) → PostgreSQL (v2/cloud)
 // Para migrar para PostgreSQL: alterar provider = "postgresql" e DATABASE_URL.
-// Ao migrar, os campos String de enum podem ser convertidos para enum real no Postgres.
 //
 // HISTÓRICO:
 //   v2.0 (MVP-004): Removidos User, Supplier, UserRole. Adicionados CardMachine, Settings.
@@ -14,15 +13,21 @@
 //   v2.1 (DT-004):  Adicionados @map em todos os campos camelCase.
 //   v2.2 (DT-005):  Enums convertidos para String — SQLite não suporta enum no Prisma 5.x.
 //                   Valores válidos documentados em comentário em cada campo.
+//   v2.3 (DT-007):  DateTime→String com dbgenerated (fix do bug de epoch ms do Prisma 5+SQLite).
+//                   O Prisma 5 serializa DateTime como epoch ms no SQLite, causando
+//                   P2023 "Could not convert value" ao ler de volta. String+strftime resolve.
+//           PROD-007: adicionado costCents Int? em Product (preço de custo para margem).
 //
 // CONVENÇÕES:
 //   - Preços SEMPRE em centavos (Int) — nunca Float/Decimal para dinheiro
 //   - Taxas em basis points (Int): 199 = 1,99% — nunca Float para percentual
 //   - IDs via cuid() — string, opaco, URL-safe
-//   - Timestamps: createdAt (default now) + updatedAt (@updatedAt automático)
-//   - Soft delete em Product: campo deletedAt (null = ativo)
+//   - Timestamps: String com ISO 8601 (INSERT: dbgenerated strftime | UPDATE: trigger SQL)
+//   - Soft delete em Product: deletedAt String? (null = ativo)
+//   - Campos de cancelamento em Sale: cancelledAt String? (null = não cancelada)
 //   - Todos os foreign keys têm @@index explícito (SQLite não cria automaticamente)
 //   - Campos de "enum" são String — validação dos valores ocorre na API (camada de aplicação)
+//   - size e color em ProductVariation podem ser "" — obrigatoriedade validada na API (DT-008)
 // =============================================================================
 
 generator client {
@@ -39,11 +44,11 @@ datasource db {
 // =============================================================================
 
 model Category {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id        String  @id @default(cuid())
+  name      String  @unique
+  isActive  Boolean @default(true) @map("is_active")
+  createdAt String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
+  updatedAt String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
   products Product[]
 
@@ -53,14 +58,15 @@ model Category {
 // Product = produto-base (ex: "Blusa Floral")
 // As variações (tamanho + cor) vivem em ProductVariation com estoque próprio.
 model Product {
-  id         String    @id @default(cuid())
+  id         String  @id @default(cuid())
   name       String
-  categoryId String    @map("category_id")
-  priceCents Int       @map("price_cents") // centavos — ex: R$ 59,90 → 5990
-  isActive   Boolean   @default(true) @map("is_active")
-  deletedAt  DateTime? @map("deleted_at")  // soft delete: null = ativo
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  categoryId String  @map("category_id")
+  priceCents Int     @map("price_cents") // centavos — ex: R$ 59,90 → 5990
+  costCents  Int?    @map("cost_cents")  // preço de custo em centavos (PROD-007) — para cálculo de margem
+  isActive   Boolean @default(true) @map("is_active")
+  deletedAt  String? @map("deleted_at") // soft delete: null = ativo
+  createdAt  String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
+  updatedAt  String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
   category   Category          @relation(fields: [categoryId], references: [id])
   variations ProductVariation[]
@@ -73,17 +79,20 @@ model Product {
 
 // ProductVariation = cada combinação única de (tamanho + cor) de um produto.
 // RN-001.3: variações distintas são registros de estoque INDEPENDENTES.
+// DT-008: size e color podem ser string vazia "" para produtos sem variação relevante
+//         (ex: acessórios, "tamanho único"). Validação de obrigatoriedade está na API.
+//         @@unique([productId, size, color]) permanece — ("id", "", "") é combinação única válida.
 model ProductVariation {
-  id            String   @id @default(cuid())
-  productId     String   @map("product_id")
-  sku           String   @unique
-  size          String
-  color         String
-  stockQuantity Int      @default(0) @map("stock_quantity") // >= 0 enforçado por trigger
-  minStock      Int      @default(2) @map("min_stock")
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id            String  @id @default(cuid())
+  productId     String  @map("product_id")
+  sku           String  @unique
+  size          String  // DT-008: pode ser "" — obrigatoriedade validada na API, não no banco
+  color         String  // DT-008: pode ser "" — obrigatoriedade validada na API, não no banco
+  stockQuantity Int     @default(0) @map("stock_quantity") // >= 0 enforçado por trigger
+  minStock      Int     @default(2) @map("min_stock")
+  isActive      Boolean @default(true) @map("is_active")
+  createdAt     String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
+  updatedAt     String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
   product      Product         @relation(fields: [productId], references: [id])
   saleItems    SaleItem[]
@@ -103,14 +112,14 @@ model ProductVariation {
 // =============================================================================
 
 model StockEntry {
-  id            String   @id @default(cuid())
-  variationId   String   @map("variation_id")
-  quantity      Int      // > 0 — validar na API
-  unitCostCents Int?     @map("unit_cost_cents") // opcional, controle interno
+  id            String  @id @default(cuid())
+  variationId   String  @map("variation_id")
+  quantity      Int     // > 0 — validar na API
+  unitCostCents Int?    @map("unit_cost_cents") // opcional, controle interno
   notes         String?
-  receivedAt    DateTime @default(now()) @map("received_at")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  receivedAt    String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("received_at")
+  createdAt     String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
+  updatedAt     String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
   variation ProductVariation @relation(fields: [variationId], references: [id])
   movement  StockMovement?
@@ -127,12 +136,12 @@ model StockEntry {
 // CardMachine = maquininha de cartão cadastrada pela dona (RN-010).
 // Taxa em basis points: 199 = 1,99%.
 model CardMachine {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   name           String
-  feeBasisPoints Int      @map("fee_basis_points") // ex: 199 = 1,99%
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  feeBasisPoints Int     @map("fee_basis_points") // ex: 199 = 1,99%
+  isActive       Boolean @default(true) @map("is_active")
+  createdAt      String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
+  updatedAt      String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
   sales Sale[]
 
@@ -143,10 +152,10 @@ model CardMachine {
 // Settings = configurações globais (singleton — 1 único registro).
 // PIN protege relatórios e configurações (RN-007).
 model Settings {
-  id        String   @id @default(cuid())
-  pinHash   String?  @map("pin_hash")   // bcrypt hash — null = sem PIN configurado
-  shopName  String   @default("Pimenta Ousada") @map("shop_name")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id        String  @id @default(cuid())
+  pinHash   String? @map("pin_hash")  // bcrypt hash — null = sem PIN configurado
+  shopName  String  @default("Pimenta Ousada") @map("shop_name")
+  updatedAt String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
   @@map("settings")
 }
@@ -155,21 +164,21 @@ model Settings {
 // status:        'ACTIVE' | 'CANCELLED'
 // paymentMethod: 'CASH' | 'PIX' | 'DEBIT' | 'CREDIT'
 model Sale {
-  id            String    @id @default(cuid())
-  status        String    @default("ACTIVE") @map("status")
+  id            String  @id @default(cuid())
+  status        String  @default("ACTIVE") @map("status")
   // Valores válidos: 'ACTIVE' | 'CANCELLED'
-  paymentMethod String    @map("payment_method")
+  paymentMethod String  @map("payment_method")
   // Valores válidos: 'CASH' | 'PIX' | 'DEBIT' | 'CREDIT'
-  subtotalCents Int       @map("subtotal_cents")  // soma dos itens SEM desconto
-  discountCents Int       @default(0) @map("discount_cents") // 0 = sem desconto
-  totalCents    Int       @map("total_cents")     // = subtotalCents - discountCents
-  cardMachineId String?   @map("card_machine_id") // null para CASH e PIX
-  feeCents      Int?      @map("fee_cents")       // taxa estimada — informativo
+  subtotalCents Int     @map("subtotal_cents")  // soma dos itens SEM desconto
+  discountCents Int     @default(0) @map("discount_cents") // 0 = sem desconto
+  totalCents    Int     @map("total_cents")     // = subtotalCents - discountCents
+  cardMachineId String? @map("card_machine_id") // null para CASH e PIX
+  feeCents      Int?    @map("fee_cents")       // taxa estimada — informativo
   notes         String?
-  cancelledAt   DateTime? @map("cancelled_at")
-  cancelReason  String?   @map("cancel_reason")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  cancelledAt   String? @map("cancelled_at")   // null = não cancelada
+  cancelReason  String? @map("cancel_reason")
+  createdAt     String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
+  updatedAt     String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
   cardMachine CardMachine?    @relation(fields: [cardMachineId], references: [id])
   items       SaleItem[]
@@ -185,13 +194,13 @@ model Sale {
 // SaleItem = linha da venda — snapshot imutável de preço.
 // RN-004.3: unitPriceCents NUNCA é atualizado após criação.
 model SaleItem {
-  id             String   @id @default(cuid())
-  saleId         String   @map("sale_id")
-  variationId    String   @map("variation_id")
+  id             String @id @default(cuid())
+  saleId         String @map("sale_id")
+  variationId    String @map("variation_id")
   quantity       Int
-  unitPriceCents Int      @map("unit_price_cents") // snapshot — imutável
-  subtotalCents  Int      @map("subtotal_cents")   // = quantity × unitPriceCents
-  createdAt      DateTime @default(now()) @map("created_at")
+  unitPriceCents Int    @map("unit_price_cents") // snapshot — imutável
+  subtotalCents  Int    @map("subtotal_cents")   // = quantity × unitPriceCents
+  createdAt      String @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
   // Sem updatedAt — imutável após criação
 
   sale      Sale             @relation(fields: [saleId], references: [id])
@@ -209,16 +218,16 @@ model SaleItem {
 // StockMovement = log imutável de toda alteração em stockQuantity.
 // type: 'ENTRY' | 'SALE' | 'CANCELLATION' | 'LOSS' | 'ADJUSTMENT'
 model StockMovement {
-  id           String    @id @default(cuid())
-  variationId  String    @map("variation_id")
-  saleId       String?   @map("sale_id")
-  stockEntryId String?   @unique @map("stock_entry_id")
-  type         String    @map("type")
+  id           String  @id @default(cuid())
+  variationId  String  @map("variation_id")
+  saleId       String? @map("sale_id")
+  stockEntryId String? @unique @map("stock_entry_id")
+  type         String  @map("type")
   // Valores válidos: 'ENTRY' | 'SALE' | 'CANCELLATION' | 'LOSS' | 'ADJUSTMENT'
-  quantity     Int       // positivo = entrada | negativo = saída
-  balanceAfter Int       @map("balance_after") // snapshot de stockQuantity pós-movimento
+  quantity     Int     // positivo = entrada | negativo = saída
+  balanceAfter Int     @map("balance_after") // snapshot de stockQuantity pós-movimento
   notes        String?
-  createdAt    DateTime  @default(now()) @map("created_at")
+  createdAt    String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
   // Sem updatedAt — imutável após criação
 
   variation  ProductVariation @relation(fields: [variationId], references: [id])
