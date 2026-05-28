@@ -15,6 +15,7 @@
 | 2.0 | MVP-004 | 2026-05-27 | Removidos User/Supplier/UserRole. Adicionados CardMachine, Settings. Sale ganhou subtotalCents, discountCents, cardMachineId, feeCents |
 | 2.1 | DT-004 | 2026-05-27 | @map adicionado em todos os campos camelCase para gerar colunas snake_case no SQLite |
 | 2.2 | DT-005 | 2026-05-27 | Enums convertidos para String — Prisma 5.x com provider=sqlite não suporta declarações enum |
+| 2.3 | DT-007 + PROD-007 | 2026-05-28 | DateTime→String/dbgenerated (fix bug epoch ms P2023). costCents Int? adicionado em Product. DT-008: size/color documentados como opcionais na API |
 
 ---
 
@@ -134,7 +135,52 @@ Settings (singleton)
 
 ---
 
-### 2.6 Campos de enum → String (DT-005)
+### 2.6 Timestamps como String/dbgenerated (DT-007)
+
+**Decisão:** Todos os campos de timestamp (`createdAt`, `updatedAt`, `receivedAt`, `deletedAt`, `cancelledAt`) são declarados como `String` no schema Prisma, não como `DateTime`.
+
+**Problema:** O Prisma 5 com `provider = "sqlite"` serializa campos `DateTime` como **epoch em milissegundos** (ex: `1779569639530`) ao invés de ISO 8601. Ao ler esses valores de volta, o Prisma lança:
+```
+P2023: Inconsistent column data: Conversion failed: 'Could not convert value "1779569639530"'
+```
+Esse bug se manifesta na primeira operação de UPDATE em qualquer tabela.
+
+**Fix:**
+- Campos `createdAt`/`updatedAt`/`receivedAt` → `String @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"))`
+- Campos nullable (`deletedAt`, `cancelledAt`) → `String?` sem default, gerenciados pela aplicação como string ISO 8601
+- `@updatedAt` é removido (não funciona com `String`) — o campo `updated_at` é mantido atualizado pelos triggers SQL da migration `20260528000001_add_cost_cents_and_triggers`
+
+**Formato:** Todos os timestamps são strings ISO 8601 com timezone UTC, ex: `"2026-05-28T14:23:11.000Z"`.
+
+**Para o Backend Agent:** Ao comparar ou ordenar timestamps, usar comparação léxica de strings — funciona corretamente com ISO 8601 em formato `YYYY-MM-DDTHH:MM:SS.sssZ`. Para converter para objeto Date em TypeScript: `new Date(record.createdAt)`.
+
+---
+
+### 2.7 costCents em Product (PROD-007)
+
+**Decisão:** `Product.costCents Int? @map("cost_cents")` — preço de custo da peça em centavos. Campo opcional.
+
+**Finalidade:** Calcular margem de lucro nos relatórios: `margem = priceCents - costCents` por unidade. Percentual de margem: `(priceCents - costCents) / priceCents * 100`.
+
+**Opcional (`Int?`):** Não bloqueia o cadastro de produtos sem custo informado. `null` = custo não cadastrado para este produto. Relatórios de margem excluem produtos com `costCents = null` ou exibem "N/A".
+
+**Para o Frontend Agent:** Exibir `costCents` como campo opcional no formulário de produto (label "Preço de Custo"). Exibir margem em tempo real enquanto o usuário preenche os dois campos.
+
+---
+
+### 2.8 size e color opcionais nas variações (DT-008)
+
+**Decisão de negócio aprovada pelo Tech Lead:** Os campos `size` (tamanho) e `color` (cor) deixam de ser obrigatórios na validação da API. A loja vende acessórios e itens de "tamanho único" que não têm variação relevante de tamanho ou cor.
+
+**Implementação no banco:** Nenhuma alteração necessária. `size` e `color` são `String` (não nullable) no schema e `TEXT NOT NULL` no SQLite. A string vazia `""` é um valor TEXT válido.
+
+**Constraint `@@unique([productId, size, color])`** permanece inalterada — a combinação `(productId, "", "")` é única e válida, representando "sem variação".
+
+**Para o Backend Agent:** Na API de criação/edição de variações, `size` e `color` devem aceitar string vazia `""`. Se o formulário enviar `null` ou `undefined`, converter para `""` antes de persistir.
+
+---
+
+### 2.9 Campos de enum → String (DT-005)
 
 **Decisão:** Todos os campos que seriam enum no Prisma são declarados como `String`. Os valores válidos são documentados em comentário no schema.
 
