@@ -174,3 +174,52 @@ export type StockAlertItem = {
   categoryId: string
   categoryName: string
 }
+
+// ---------------------------------------------------------------------------
+// SALES — VEND-001/002/003
+// ---------------------------------------------------------------------------
+
+export type SaleItemResponse = {
+  id: string
+  variationId: string
+  variationSku: string
+  productName: string
+  size: string
+  color: string
+  quantity: number
+  unitPriceCents: number
+  subtotalCents: number
+}
+
+export type SaleResponse = {
+  id: string
+  status: string
+  paymentMethod: string
+  paymentMethodLabel: string   // "Dinheiro" | "PIX" | "Débito" | "Crédito"
+  subtotalCents: number
+  discountCents: number
+  totalCents: number
+  cardMachineId: string | null
+  cardMachineName: string | null
+  feeCents: number | null
+  notes: string | null
+  cancelledAt: string | null
+  cancelReason: string | null
+  items: SaleItemResponse[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type SaleListItem = {
+  id: string
+  status: string
+  paymentMethod: string
+  paymentMethodLabel: string
+  subtotalCents: number
+  discountCents: number
+  totalCents: number
+  cardMachineName: string | null
+  feeCents: number | null
+  itemCount: number   // contagem de SaleItems
+  createdAt: string
+}
