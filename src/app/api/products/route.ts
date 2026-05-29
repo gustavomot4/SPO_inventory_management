@@ -112,6 +112,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         categoryId: p.categoryId,
         categoryName: p.category.name,
         priceCents: p.priceCents,
+        costCents: p.costCents,
         isActive: p.isActive,
         variationCount: activeVariations.length,
         totalStock,
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
-    const { name, categoryId, priceCents, variations } = body as Record<string, unknown>
+    const { name, categoryId, priceCents, costCents, variations } = body as Record<string, unknown>
 
     // --- Validar produto ---
 
@@ -194,6 +195,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { error: 'O preço deve ser um inteiro >= 0 (em centavos)', code: 'INVALID_PRICE' },
         { status: 400 }
       )
+    }
+
+    // Validar costCents (opcional)
+    if (costCents !== undefined && costCents !== null) {
+      if (typeof costCents !== 'number' || !Number.isInteger(costCents) || costCents < 0) {
+        return NextResponse.json<ApiError>(
+          { error: 'O campo "costCents" deve ser um inteiro >= 0 (em centavos)', code: 'INVALID_COST' },
+          { status: 400 }
+        )
+      }
     }
 
     // Verificar categoria existe e está ativa
@@ -228,17 +239,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     for (const v of variations) {
       const variation = v as Record<string, unknown>
 
-      if (
-        typeof variation.size !== 'string' || variation.size.trim().length === 0 ||
-        typeof variation.color !== 'string' || variation.color.trim().length === 0
-      ) {
+      if (typeof variation.size !== 'string' || typeof variation.color !== 'string') {
         return NextResponse.json<ApiError>(
-          { error: 'Cada variação deve ter "size" e "color" não vazios', code: 'INVALID_VARIATION' },
+          { error: 'Os campos "size" e "color" devem ser strings (podem ser vazios)', code: 'INVALID_VARIATION' },
           { status: 400 }
         )
       }
 
-      const key = `${variation.size.trim().toLowerCase()}::${variation.color.trim().toLowerCase()}`
+      const key = `${(variation.size as string).toLowerCase()}::${(variation.color as string).toLowerCase()}`
       if (variationKeys.has(key)) {
         return NextResponse.json<ApiError>(
           {
@@ -264,8 +272,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     for (const v of variations) {
       const variation = v as Record<string, unknown>
-      const size = (variation.size as string).trim()
-      const color = (variation.color as string).trim()
+      const size = variation.size as string
+      const color = variation.color as string
 
       let sku: string
       if (typeof variation.sku === 'string' && variation.sku.trim().length > 0) {
@@ -308,6 +316,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           name: productName,
           categoryId: categoryId as string,
           priceCents: priceCents as number,
+          costCents: (costCents as number | null | undefined) ?? null,
           variations: {
             create: variationsWithSku,
           },
@@ -328,6 +337,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       categoryId: product.categoryId,
       categoryName: product.category.name,
       priceCents: product.priceCents,
+      costCents: product.costCents,
       isActive: product.isActive,
       deletedAt: product.deletedAt,
       variations: product.variations.map(formatVariation),
