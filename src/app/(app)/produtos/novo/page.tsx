@@ -34,6 +34,7 @@ interface ProductFormErrors {
   name?: string
   categoryId?: string
   priceCents?: string
+  costCents?: string
   variations?: string
   general?: string
 }
@@ -51,6 +52,7 @@ export default function NovoProdutoPage() {
   const [name, setName] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [priceInput, setPriceInput] = useState('')
+  const [costInput, setCostInput] = useState('')
   const [variations, setVariations] = useState<VariationDraft[]>([
     newDraft(),
   ])
@@ -119,18 +121,14 @@ export default function NovoProdutoPage() {
       errs.variations = 'Adicione pelo menos uma variação'
     }
 
-    // Validar cada variação
-    let varHasError = false
-    const newVariations = variations.map(v => {
-      const ve: VariationDraft['errors'] = {}
-      if (!v.size.trim()) ve.size = 'Obrigatório'
-      if (!v.color.trim()) ve.color = 'Obrigatório'
-      if (Object.keys(ve).length > 0) varHasError = true
-      return { ...v, errors: ve }
-    })
-    if (varHasError) {
-      setVariations(newVariations)
-      errs.variations = 'Corrija os erros nas variações'
+    // Validar custo (opcional)
+    if (costInput.trim()) {
+      try {
+        const c = parseCurrencyToCents(costInput)
+        if (c < 0) errs.costCents = 'Custo deve ser ≥ 0'
+      } catch {
+        errs.costCents = 'Custo inválido (ex: 25,90)'
+      }
     }
 
     setErrors(errs)
@@ -145,10 +143,16 @@ export default function NovoProdutoPage() {
     let priceCents = 0
     try { priceCents = parseCurrencyToCents(priceInput) } catch { /* validated */ }
 
+    let costCents: number | undefined
+    if (costInput.trim()) {
+      try { costCents = parseCurrencyToCents(costInput) } catch { /* validated */ }
+    }
+
     const payload = {
       name: name.trim(),
       categoryId,
       priceCents,
+      ...(costCents !== undefined ? { costCents } : {}),
       variations: variations.map(v => ({
         size: v.size.trim(),
         color: v.color.trim(),
@@ -237,12 +241,22 @@ export default function NovoProdutoPage() {
               options={categories.map(c => ({ value: c.id, label: c.name }))}
             />
             <Input
-              label="Preço de venda (R$)"
+              label="Preço de venda (R$) *"
               value={priceInput}
               onChange={e => { setPriceInput(e.target.value); setErrors(p => ({ ...p, priceCents: undefined })) }}
               error={errors.priceCents}
               placeholder="Ex: 89,90"
               hint={priceInput ? (() => { try { return formatCurrency(parseCurrencyToCents(priceInput)) } catch { return '' } })() : ''}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Preço de custo (opcional)"
+              value={costInput}
+              onChange={e => { setCostInput(e.target.value); setErrors(p => ({ ...p, costCents: undefined })) }}
+              error={errors.costCents}
+              placeholder="Ex: 25,00"
+              hint={costInput ? (() => { try { return formatCurrency(parseCurrencyToCents(costInput)) } catch { return '' } })() : 'Para calcular margem'}
             />
           </div>
         </div>
@@ -262,7 +276,7 @@ export default function NovoProdutoPage() {
 
         {/* Header */}
         <div className="hidden sm:grid grid-cols-[1fr_1fr_1fr_6rem_6rem_2rem] gap-2 px-6 py-2 border-b border-border bg-muted/30">
-          {['Tamanho', 'Cor', 'SKU (opcional)', 'Est. Mín.', 'Est. Inicial', ''].map(h => (
+          {['Tamanho (opcional)', 'Cor (opcional)', 'SKU (opcional)', 'Est. Mín.', 'Est. Inicial', ''].map(h => (
             <p key={h} className="text-xs font-medium text-muted-foreground">{h}</p>
           ))}
         </div>
@@ -282,16 +296,14 @@ export default function NovoProdutoPage() {
                   <p className="text-xs font-medium text-muted-foreground">Variação {idx + 1}</p>
                   <div className="grid grid-cols-2 gap-2">
                     <Input
-                      placeholder="Tamanho (P, M, G...)"
+                      placeholder="Ex: P, M, G, GG (ou deixar em branco)"
                       value={v.size}
                       onChange={e => updateVariation(v.id, 'size', e.target.value)}
-                      error={v.errors.size}
                     />
                     <Input
-                      placeholder="Cor (Rosa, Azul...)"
+                      placeholder="Ex: Preto, Rosa (ou deixar em branco)"
                       value={v.color}
                       onChange={e => updateVariation(v.id, 'color', e.target.value)}
-                      error={v.errors.color}
                     />
                   </div>
                   <div className="grid grid-cols-3 gap-2">
@@ -330,16 +342,14 @@ export default function NovoProdutoPage() {
                 {/* Desktop: grid */}
                 <div className="hidden sm:grid grid-cols-[1fr_1fr_1fr_6rem_6rem_2rem] gap-2 items-start">
                   <Input
-                    placeholder="P, M, G, 38..."
+                    placeholder="Ex: P, M, G (opcional)"
                     value={v.size}
                     onChange={e => updateVariation(v.id, 'size', e.target.value)}
-                    error={v.errors.size}
                   />
                   <Input
-                    placeholder="Rosa, Azul..."
+                    placeholder="Ex: Rosa, Azul (opcional)"
                     value={v.color}
                     onChange={e => updateVariation(v.id, 'color', e.target.value)}
-                    error={v.errors.color}
                   />
                   <Input
                     placeholder="Auto"
