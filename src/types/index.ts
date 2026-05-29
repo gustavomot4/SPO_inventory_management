@@ -101,6 +101,7 @@ export type ProductResponse = {
   categoryId: string
   categoryName: string
   priceCents: number
+  costCents: number | null  // preço de custo em centavos (PROD-007) — null se não informado
   isActive: boolean
   deletedAt: string | null
   variations: VariationResponse[]
@@ -115,10 +116,61 @@ export type ProductListItem = {
   categoryId: string
   categoryName: string
   priceCents: number
+  costCents: number | null  // preço de custo em centavos (PROD-007) — null se não informado
   isActive: boolean
   variationCount: number
   totalStock: number   // soma de stockQuantity das variações ativas
   hasLowStock: boolean // true se alguma variação ativa está em alerta de estoque
   createdAt: string
   updatedAt: string
+}
+
+// ---------------------------------------------------------------------------
+// STOCK ENTRIES — EST-001
+// ---------------------------------------------------------------------------
+
+export type StockEntryResponse = {
+  id: string
+  variationId: string
+  variationSku: string
+  productId: string
+  productName: string
+  quantity: number
+  unitCostCents: number | null
+  notes: string | null
+  receivedAt: string
+  createdAt: string
+  stockAfter: number   // novo stockQuantity da variação após a entrada
+  movementId: string   // id do StockMovement criado
+}
+
+export type StockEntryListItem = {
+  id: string
+  variationId: string
+  variationSku: string
+  productId: string
+  productName: string
+  quantity: number
+  unitCostCents: number | null
+  notes: string | null
+  receivedAt: string
+  createdAt: string
+}
+
+// ---------------------------------------------------------------------------
+// STOCK ALERTS — EST-004
+// ---------------------------------------------------------------------------
+
+export type StockAlertItem = {
+  variationId: string
+  variationSku: string
+  size: string
+  color: string
+  stockQuantity: number
+  minStock: number
+  status: 'OUT' | 'LOW' // OUT = zerado | LOW = abaixo do mínimo
+  productId: string
+  productName: string
+  categoryId: string
+  categoryName: string
 }

@@ -118,23 +118,23 @@ export async function POST(
 
     const { size, color, sku: skuInput, stockQuantity, minStock } = body as Record<string, unknown>
 
-    // Validar size e color
-    if (typeof size !== 'string' || size.trim().length === 0) {
+    // Validar size e color — DT-008: strings vazias são permitidas
+    if (typeof size !== 'string') {
       return NextResponse.json<ApiError>(
-        { error: 'O campo "size" é obrigatório e não pode ser vazio', code: 'INVALID_VARIATION' },
+        { error: 'O campo "size" é obrigatório e deve ser uma string (pode ser vazia)', code: 'INVALID_VARIATION' },
         { status: 400 }
       )
     }
 
-    if (typeof color !== 'string' || color.trim().length === 0) {
+    if (typeof color !== 'string') {
       return NextResponse.json<ApiError>(
-        { error: 'O campo "color" é obrigatório e não pode ser vazio', code: 'INVALID_VARIATION' },
+        { error: 'O campo "color" é obrigatório e deve ser uma string (pode ser vazia)', code: 'INVALID_VARIATION' },
         { status: 400 }
       )
     }
 
-    const sizeClean = (size as string).trim()
-    const colorClean = (color as string).trim()
+    const sizeClean = size as string
+    const colorClean = color as string
 
     // Verificar duplicata size+color neste produto
     const duplicate = await prisma.productVariation.findFirst({

@@ -74,6 +74,7 @@ export async function GET(
         categoryId: product.categoryId,
         categoryName: product.category.name,
         priceCents: product.priceCents,
+        costCents: product.costCents,
         isActive: product.isActive,
         deletedAt: product.deletedAt,
         variations: product.variations.map(formatVariation),
@@ -131,7 +132,7 @@ export async function PATCH(
       )
     }
 
-    const { name, categoryId, priceCents, isActive } = body as Record<string, unknown>
+    const { name, categoryId, priceCents, costCents, isActive } = body as Record<string, unknown>
 
     // Validações
     if (name !== undefined) {
@@ -178,15 +179,27 @@ export async function PATCH(
       )
     }
 
+    // Validar costCents (opcional; null = limpar valor)
+    if (costCents !== undefined && costCents !== null) {
+      if (typeof costCents !== 'number' || !Number.isInteger(costCents) || costCents < 0) {
+        return NextResponse.json<ApiError>(
+          { error: 'O campo "costCents" deve ser um inteiro >= 0 (em centavos)', code: 'INVALID_COST' },
+          { status: 400 }
+        )
+      }
+    }
+
     const updateData: {
       name?: string
       categoryId?: string
       priceCents?: number
+      costCents?: number | null
       isActive?: boolean
     } = {}
     if (name !== undefined) updateData.name = (name as string).trim()
     if (categoryId !== undefined) updateData.categoryId = categoryId as string
     if (priceCents !== undefined) updateData.priceCents = priceCents as number
+    if (costCents !== undefined) updateData.costCents = costCents as number | null
     if (isActive !== undefined) updateData.isActive = isActive as boolean
 
     if (Object.keys(updateData).length === 0) {
@@ -214,6 +227,7 @@ export async function PATCH(
         categoryId: product.categoryId,
         categoryName: product.category.name,
         priceCents: product.priceCents,
+        costCents: product.costCents,
         isActive: product.isActive,
         deletedAt: product.deletedAt,
         variations: product.variations.map(formatVariation),
@@ -270,6 +284,7 @@ export async function DELETE(
         categoryId: product.categoryId,
         categoryName: product.category.name,
         priceCents: product.priceCents,
+        costCents: product.costCents,
         isActive: product.isActive,
         deletedAt: product.deletedAt,
         variations: product.variations.map(formatVariation),
