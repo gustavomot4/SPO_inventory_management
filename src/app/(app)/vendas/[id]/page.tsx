@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Printer, Loader2, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Printer, Loader2, AlertTriangle, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
@@ -267,6 +267,12 @@ export default function VendaDetalhePage() {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              <Link href="/vendas/nova">
+                <Button size="sm">
+                  <Plus className="h-4 w-4" />
+                  Nova Venda
+                </Button>
+              </Link>
               <Button
                 variant="secondary"
                 size="sm"
@@ -343,7 +349,7 @@ export default function VendaDetalhePage() {
           </div>
         </div>
 
-        {/* Comanda — visível na tela + imprimível */}
+        {/* Comanda */}
         <div className="no-print mb-2">
           <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">
             Preview da Comanda

@@ -78,7 +78,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       take: pageSize + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       where: {
-        ...(search ? { name: { contains: search } } : {}),
+        ...(search ? {
+          OR: [
+            { name: { contains: search } },
+            { variations: { some: { sku: { contains: search } } } },
+          ],
+        } : {}),
         ...(categoryId ? { categoryId } : {}),
         ...(isActiveFilter !== undefined ? { isActive: isActiveFilter } : {}),
         ...(includeDeleted ? {} : { deletedAt: null }),
@@ -89,6 +94,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         variations: {
           where: { isActive: true },
           select: {
+            sku: true,
             stockQuantity: true,
             minStock: true,
             isActive: true,
@@ -118,6 +124,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         costCents: p.costCents,
         isActive: p.isActive,
         variationCount: activeVariations.length,
+        variationSkus: activeVariations.map(v => v.sku),
         totalStock,
         hasLowStock,
         createdAt: p.createdAt,

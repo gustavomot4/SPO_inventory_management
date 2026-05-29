@@ -63,7 +63,14 @@ function ProductRow({ product }: { product: ProductListItem }) {
         <p className="text-xs text-muted-foreground mt-0.5">
           {product.categoryName}
           {product.variationCount > 0 && (
-            <span className="ml-2">· {product.variationCount} variação{product.variationCount !== 1 ? 'ões' : ''}</span>
+            <span className="ml-2">· {product.variationCount} var.</span>
+          )}
+          {product.variationSkus.length > 0 && (
+            <span className="ml-2 font-mono">
+              {product.variationSkus.length === 1
+                ? product.variationSkus[0]
+                : `${product.variationSkus[0]} +${product.variationSkus.length - 1}`}
+            </span>
           )}
         </p>
       </div>
@@ -334,11 +341,7 @@ export default function ProdutosPage() {
       {/* Paginação */}
       {hasNextPage && (
         <div className="mt-4 flex justify-center">
-          <Button
-            variant="secondary"
-            onClick={handleLoadMore}
-            loading={loadingMore}
-          >
+          <Button variant="secondary" onClick={handleLoadMore} loading={loadingMore}>
             Carregar mais
           </Button>
         </div>

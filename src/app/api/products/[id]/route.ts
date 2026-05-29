@@ -115,13 +115,6 @@ export async function PATCH(
       )
     }
 
-    if (existing.deletedAt !== null) {
-      return NextResponse.json<ApiError>(
-        { error: 'Produto foi excluído e não pode ser atualizado', code: 'PRODUCT_DELETED' },
-        { status: 422 }
-      )
-    }
-
     let body: unknown
     try {
       body = await request.json()
@@ -133,6 +126,14 @@ export async function PATCH(
     }
 
     const { name, categoryId, priceCents, costCents, isActive } = body as Record<string, unknown>
+
+    // Produto deletado só pode ser reativado via isActive: true
+    if (existing.deletedAt !== null && isActive !== true) {
+      return NextResponse.json<ApiError>(
+        { error: 'Produto foi excluído e não pode ser atualizado', code: 'PRODUCT_DELETED' },
+        { status: 422 }
+      )
+    }
 
     // Validações
     if (name !== undefined) {
@@ -200,7 +201,11 @@ export async function PATCH(
     if (categoryId !== undefined) updateData.categoryId = categoryId as string
     if (priceCents !== undefined) updateData.priceCents = priceCents as number
     if (costCents !== undefined) updateData.costCents = costCents as number | null
-    if (isActive !== undefined) updateData.isActive = isActive as boolean
+    if (isActive !== undefined) {
+      updateData.isActive = isActive as boolean
+      // Reativar: limpar deletedAt para tornar o produto visível novamente
+      if (isActive === true) (updateData as Record<string, unknown>).deletedAt = null
+    }
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json<ApiError>(
@@ -216,63 +221,6 @@ export async function PATCH(
         category: { select: { name: true } },
         variations: {
           orderBy: [{ isActive: 'desc' }, { size: 'asc' }, { color: 'asc' }],
-        },
-      },
-    })
-
-    return NextResponse.json<ApiSuccess<ProductResponse>>({
-      data: {
-        id: product.id,
-        name: product.name,
-        categoryId: product.categoryId,
-        categoryName: product.category.name,
-        priceCents: product.priceCents,
-        costCents: product.costCents,
-        isActive: product.isActive,
-        deletedAt: product.deletedAt,
-        variations: product.variations.map(formatVariation),
-        createdAt: product.createdAt,
-        updatedAt: product.updatedAt,
-      },
-    })
-  } catch (error) {
-    const prismaError = error as { code?: string }
-    if (prismaError.code === 'P2025') {
-      return NextResponse.json<ApiError>(
-        { error: 'Produto não encontrado', code: 'NOT_FOUND' },
-        { status: 404 }
-      )
-    }
-    console.error('[PATCH /api/products/[id]]', error)
-    return NextResponse.json<ApiError>(
-      { error: 'Erro interno do servidor', code: 'INTERNAL_ERROR' },
-      { status: 500 }
-    )
-  }
-}
-
-// ---------------------------------------------------------------------------
-// DELETE /api/products/[id]
-// Soft delete: deletedAt = ISO string + isActive = false
-// Produto desaparece da listagem padrão mas não é removido do banco
-// (histórico de SaleItems preservado)
-// ---------------------------------------------------------------------------
-
-export async function DELETE(
-  _request: NextRequest,
-  { params }: RouteContext
-): Promise<NextResponse> {
-  try {
-    const product = await prisma.product.update({
-      where: { id: params.id },
-      data: {
-        deletedAt: new Date().toISOString(),
-        isActive: false,
-      },
-      include: {
-        category: { select: { name: true } },
-        variations: {
-          orderBy: [{ size: 'asc' }, { color: 'asc' }],
         },
       },
     })

@@ -119,6 +119,7 @@ export type ProductListItem = {
   costCents: number | null  // preço de custo em centavos (PROD-007) — null se não informado
   isActive: boolean
   variationCount: number
+  variationSkus: string[]  // SKUs das variações ativas
   totalStock: number   // soma de stockQuantity das variações ativas
   hasLowStock: boolean // true se alguma variação ativa está em alerta de estoque
   createdAt: string

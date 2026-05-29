@@ -221,9 +221,10 @@ export default function ProdutoDetalhePage() {
   })
   const [addingVar, setAddingVar] = useState(false)
 
-  // Inativar produto
+  // Inativar / Reativar produto
   const [deletingProduct, setDeletingProduct] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [reactivating, setReactivating] = useState(false)
 
   // ── Carregar produto e categorias ──
   const loadProduct = useCallback(async () => {
@@ -407,6 +408,22 @@ export default function ProdutoDetalhePage() {
     } catch {
       setDeletingProduct(false)
       setConfirmDelete(false)
+    }
+  }
+
+  // ── Reativar produto ──
+  async function handleReactivate() {
+    setReactivating(true)
+    try {
+      const res = await fetch(`/api/products/${productId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: true }),
+      })
+      const json: ApiResponse<ProductResponse> = await res.json()
+      if ('data' in json) setProduct(json.data)
+    } catch { /* silencioso */ } finally {
+      setReactivating(false)
     }
   }
 
@@ -611,6 +628,33 @@ export default function ProdutoDetalhePage() {
           </>
         )}
       </div>
+
+      {/* ── Reativar produto (quando inativo) ── */}
+      {!product.isActive && (
+        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden mb-5">
+          <div className="px-6 py-4 border-b border-border">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              Produto Inativo
+            </p>
+          </div>
+          <div className="px-6 py-5 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">Reativar produto</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                O produto e suas variações voltarão a aparecer no catálogo.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={reactivating}
+              onClick={handleReactivate}
+            >
+              Reativar
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* ── Zona de perigo ── */}
       {product.isActive && (

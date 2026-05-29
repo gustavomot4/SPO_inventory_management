@@ -473,13 +473,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       cardMachineName: s.cardMachine?.name ?? null,
       feeCents: s.feeCents,
       itemCount: s._count.items,
-      createdAt: s.createdAt,
+      createdAt: String(s.createdAt),
     }))
 
     return NextResponse.json<ApiSuccess<SaleListItem[]>>({
       data,
       meta: {
-        pageSize,
         hasNextPage,
         cursor: hasNextPage && lastItem ? lastItem.id : undefined,
       },

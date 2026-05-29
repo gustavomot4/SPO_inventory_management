@@ -53,6 +53,7 @@ export default function NovoProdutoPage() {
   const [categoryId, setCategoryId] = useState('')
   const [priceInput, setPriceInput] = useState('')
   const [costInput, setCostInput] = useState('')
+  const [savedProductId, setSavedProductId] = useState<string | null>(null)
   const [variations, setVariations] = useState<VariationDraft[]>([
     newDraft(),
   ])
@@ -185,7 +186,7 @@ export default function NovoProdutoPage() {
       }
 
       if ('data' in json) {
-        router.replace(`/produtos/${json.data.id}`)
+        setSavedProductId(json.data.id)
       }
     } catch {
       setErrors({ general: 'Erro de conexão. Tente novamente.' })
@@ -400,7 +401,36 @@ export default function NovoProdutoPage() {
         </div>
       )}
 
+      {/* Sucesso */}
+      {savedProductId && (
+        <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-5 py-4">
+          <p className="text-sm font-semibold text-green-800 mb-3">
+            Produto cadastrado com sucesso!
+          </p>
+          <div className="flex items-center gap-2">
+            <Link href={`/produtos/${savedProductId}`}>
+              <Button size="sm" variant="secondary">Ver produto</Button>
+            </Link>
+            <Button
+              size="sm"
+              onClick={() => {
+                setSavedProductId(null)
+                setName('')
+                setCategoryId('')
+                setPriceInput('')
+                setCostInput('')
+                setVariations([newDraft()])
+                setErrors({})
+              }}
+            >
+              Cadastrar outro produto
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Ações */}
+      {!savedProductId && (
       <div className="flex items-center justify-end gap-3">
         <Link href="/produtos">
           <Button variant="secondary">Cancelar</Button>
@@ -409,6 +439,7 @@ export default function NovoProdutoPage() {
           Salvar Produto
         </Button>
       </div>
+      )}
 
     </div>
   )
