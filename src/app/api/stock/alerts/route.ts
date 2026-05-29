@@ -18,6 +18,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getStockStatus } from '@/lib/utils'
+
+export const dynamic = 'force-dynamic'
 import type { ApiSuccess, ApiError, StockAlertItem } from '@/types'
 
 export async function GET(request: NextRequest): Promise<NextResponse> {

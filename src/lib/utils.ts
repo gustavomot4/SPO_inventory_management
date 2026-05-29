@@ -131,10 +131,10 @@ export const STOCK_STATUS_LABELS: Record<StockStatus, string> = {
 // ---------------------------------------------------------------------------
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  CASH: 'Dinheiro',
-  PIX: 'Pix',
-  DEBIT_CARD: 'Cartão de Débito',
-  CREDIT_CARD: 'Cartão de Crédito',
+  CASH:   'Dinheiro',
+  PIX:    'PIX',
+  DEBIT:  'Débito',
+  CREDIT: 'Crédito',
 }
 
 // ---------------------------------------------------------------------------
