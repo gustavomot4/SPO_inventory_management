@@ -49,8 +49,13 @@ function ProductRow({ product }: { product: ProductListItem }) {
   return (
     <Link
       href={`/produtos/${product.id}`}
-      className="border-b border-border last:border-0 px-6 py-4 flex items-center gap-4 hover:bg-muted/50 transition-colors group"
+      className={cn(
+        'border-b border-border last:border-0 px-6 py-4 hover:bg-muted/50 transition-colors group',
+        'flex items-center gap-4',
+        'md:grid md:grid-cols-[1fr_7rem_5rem_10rem] md:gap-4'
+      )}
     >
+      {/* Produto */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground truncate group-hover:text-brand-700 transition-colors">
           {product.name}
@@ -64,17 +69,17 @@ function ProductRow({ product }: { product: ProductListItem }) {
       </div>
 
       {/* Preço */}
-      <p className="text-sm text-foreground shrink-0 hidden sm:block">
+      <p className="text-sm text-foreground hidden md:block">
         {formatCurrency(product.priceCents)}
       </p>
 
       {/* Estoque */}
-      <p className="text-sm text-muted-foreground shrink-0 hidden md:block w-20 text-right">
+      <p className="text-sm text-muted-foreground text-right hidden md:block">
         {product.totalStock} un.
       </p>
 
-      {/* Badges */}
-      <div className="flex items-center gap-1.5 shrink-0">
+      {/* Status — mobile: compact, desktop: alinhado */}
+      <div className="flex items-center gap-1.5 shrink-0 ml-auto md:ml-0">
         {product.hasLowStock && product.totalStock > 0 && (
           <Badge variant="warning">Estoque Baixo</Badge>
         )}
@@ -131,8 +136,13 @@ export default function ProdutosPage() {
     if (opts.search) params.set('search', opts.search)
     if (opts.categoryId) params.set('categoryId', opts.categoryId)
     if (opts.status === 'active') params.set('isActive', 'true')
-    if (opts.status === 'inactive') params.set('isActive', 'false')
-    if (opts.status === 'all') params.set('includeDeleted', 'true')
+    if (opts.status === 'inactive') {
+      params.set('isActive', 'false')
+      params.set('includeDeleted', 'true') // inativos têm deletedAt preenchido
+    }
+    if (opts.status === 'all') {
+      params.set('includeDeleted', 'true') // inclui soft-deleted
+    }
     if (opts.cursorParam) params.set('cursor', opts.cursorParam)
     params.set('pageSize', '20')
 
@@ -141,10 +151,18 @@ export default function ProdutosPage() {
       const json: ApiResponse<ProductListItem[]> = await res.json()
       if (!('data' in json)) return
 
+      // Para "todos": garante ativos primeiro, depois inativos (mesmo nome)
+      const sortedData = opts.status === 'all'
+        ? [...json.data].sort((a, b) => {
+            if (a.isActive === b.isActive) return 0
+            return a.isActive ? -1 : 1
+          })
+        : json.data
+
       if (opts.append) {
-        setProducts(prev => [...prev, ...json.data])
+        setProducts(prev => [...prev, ...sortedData])
       } else {
-        setProducts(json.data)
+        setProducts(sortedData)
       }
       setHasNextPage(json.meta?.hasNextPage ?? false)
       setCursor(json.meta?.cursor ?? null)
@@ -263,17 +281,17 @@ export default function ProdutosPage() {
       <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
 
         {/* Header da tabela — só em telas maiores */}
-        <div className="hidden md:flex items-center gap-4 px-6 py-3 border-b border-border bg-muted/30">
-          <p className="flex-1 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+        <div className="hidden md:grid grid-cols-[1fr_7rem_5rem_10rem] gap-4 px-6 py-3 border-b border-border bg-muted/30">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
             Produto
           </p>
-          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground w-24 shrink-0">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
             Preço
           </p>
-          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground w-20 text-right shrink-0">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground text-right">
             Estoque
           </p>
-          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground shrink-0 w-36">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
             Status
           </p>
         </div>

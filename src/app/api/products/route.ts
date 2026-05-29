@@ -63,9 +63,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const cursor = searchParams.get('cursor') || undefined
     const includeDeleted = searchParams.get('includeDeleted') === 'true'
 
-    // isActive: padrão true, a menos que explicitamente passado como false
+    // isActive: undefined = sem filtro (retorna ativos e inativos)
     const isActiveParam = searchParams.get('isActive')
-    const isActiveFilter = isActiveParam === 'false' ? false : isActiveParam === 'true' ? true : true
+    const isActiveFilter: boolean | undefined =
+      isActiveParam === 'false' ? false :
+      isActiveParam === 'true' ? true :
+      undefined
 
     const pageSizeParam = parseInt(searchParams.get('pageSize') || '20', 10)
     const pageSize = Math.min(Math.max(1, isNaN(pageSizeParam) ? 20 : pageSizeParam), 100)
@@ -77,7 +80,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       where: {
         ...(search ? { name: { contains: search } } : {}),
         ...(categoryId ? { categoryId } : {}),
-        isActive: isActiveFilter,
+        ...(isActiveFilter !== undefined ? { isActive: isActiveFilter } : {}),
         ...(includeDeleted ? {} : { deletedAt: null }),
       },
       orderBy: { name: 'asc' },

@@ -50,6 +50,7 @@ interface ProductFormErrors {
   name?: string
   categoryId?: string
   priceCents?: string
+  costCents?: string
   general?: string
 }
 
@@ -58,7 +59,7 @@ interface NewVariationDraft {
   color: string
   sku: string
   minStock: string
-  errors: { size?: string; color?: string; general?: string }
+  errors: { general?: string }
 }
 
 // ---------------------------------------------------------------------------
@@ -208,6 +209,7 @@ export default function ProdutoDetalhePage() {
   const [name, setName] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [priceInput, setPriceInput] = useState('')
+  const [costInput, setCostInput] = useState('')
   const [formErrors, setFormErrors] = useState<ProductFormErrors>({})
   const [savingProduct, setSavingProduct] = useState(false)
   const [savedProduct, setSavedProduct] = useState(false)
@@ -242,6 +244,7 @@ export default function ProdutoDetalhePage() {
         setName(p.name)
         setCategoryId(p.categoryId)
         setPriceInput((p.priceCents / 100).toFixed(2).replace('.', ','))
+        setCostInput(p.costCents !== null ? (p.costCents / 100).toFixed(2).replace('.', ',') : '')
       }
       if ('data' in catJson) setCategories(catJson.data)
     } catch {
@@ -265,8 +268,25 @@ export default function ProdutoDetalhePage() {
       try { parseCurrencyToCents(priceInput) }
       catch { errs.priceCents = 'Preço inválido (ex: 59,90)' }
     }
+    if (costInput.trim()) {
+      try {
+        const c = parseCurrencyToCents(costInput)
+        if (c < 0) errs.costCents = 'Custo deve ser ≥ 0'
+      } catch {
+        errs.costCents = 'Custo inválido (ex: 25,90)'
+      }
+    }
     setFormErrors(errs)
     if (Object.keys(errs).length > 0) return
+
+    // Calcular costCents para o PATCH
+    let costCentsValue: number | null | undefined
+    if (costInput.trim() === '') {
+      // Campo vazio = limpar (null)
+      costCentsValue = null
+    } else {
+      try { costCentsValue = parseCurrencyToCents(costInput) } catch { /* validated */ }
+    }
 
     setSavingProduct(true)
     try {
@@ -277,6 +297,7 @@ export default function ProdutoDetalhePage() {
           name: name.trim(),
           categoryId,
           priceCents: parseCurrencyToCents(priceInput),
+          costCents: costCentsValue,
         }),
       })
       const json: ApiResponse<ProductResponse> = await res.json()
@@ -336,8 +357,7 @@ export default function ProdutoDetalhePage() {
   // ── Adicionar variação ──
   async function handleAddVariation() {
     const errs: NewVariationDraft['errors'] = {}
-    if (!newVar.size.trim()) errs.size = 'Obrigatório'
-    if (!newVar.color.trim()) errs.color = 'Obrigatório'
+    // DT-008: size e color são opcionais — sem validação de obrigatório
     setNewVar(p => ({ ...p, errors: errs }))
     if (Object.keys(errs).length > 0) return
 
@@ -469,6 +489,18 @@ export default function ProdutoDetalhePage() {
               })()}
             />
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Preço de custo (opcional)"
+              value={costInput}
+              onChange={e => { setCostInput(e.target.value); setFormErrors(p => ({ ...p, costCents: undefined })) }}
+              error={formErrors.costCents}
+              placeholder="Ex: 25,00"
+              hint={costInput
+                ? (() => { try { return formatCurrency(parseCurrencyToCents(costInput)) } catch { return '' } })()
+                : product.costCents !== null ? formatCurrency(product.costCents) : 'Para calcular margem'}
+            />
+          </div>
 
           {formErrors.general && (
             <p className="text-sm text-destructive">{formErrors.general}</p>
@@ -512,17 +544,15 @@ export default function ProdutoDetalhePage() {
             <p className="text-xs font-medium text-foreground mb-3">Nova variação</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Input
-                placeholder="Tamanho"
+                placeholder="Tamanho (opcional)"
                 value={newVar.size}
-                onChange={e => setNewVar(p => ({ ...p, size: e.target.value, errors: { ...p.errors, size: undefined } }))}
-                error={newVar.errors.size}
+                onChange={e => setNewVar(p => ({ ...p, size: e.target.value }))}
                 autoFocus
               />
               <Input
-                placeholder="Cor"
+                placeholder="Cor (opcional)"
                 value={newVar.color}
-                onChange={e => setNewVar(p => ({ ...p, color: e.target.value, errors: { ...p.errors, color: undefined } }))}
-                error={newVar.errors.color}
+                onChange={e => setNewVar(p => ({ ...p, color: e.target.value }))}
               />
               <Input
                 placeholder="SKU (auto)"

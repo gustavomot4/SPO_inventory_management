@@ -12,6 +12,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  LayoutDashboard,
   Package,
   Layers,
   ShoppingBag,
@@ -21,7 +22,8 @@ import {
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
-  { href: '/produtos',      label: 'Produtos',     icon: Package },
+  { href: '/',              label: 'Painel',        icon: LayoutDashboard },
+  { href: '/produtos',      label: 'Produtos',      icon: Package },
   { href: '/estoque',       label: 'Estoque',       icon: Layers },
   { href: '/vendas',        label: 'Vendas',        icon: ShoppingBag },
   { href: '/relatorios',    label: 'Relatórios',    icon: BarChart2 },
@@ -62,6 +64,15 @@ function NavItem({
 export function SidebarContent() {
   const pathname = usePathname()
 
+  const navItemsWithActive = NAV_ITEMS.map(item => ({
+    href: item.href,
+    label: item.label,
+    icon: item.icon,
+    active: item.href === '/'
+      ? pathname === '/'
+      : pathname === item.href || pathname.startsWith(item.href + '/'),
+  }))
+
   return (
     <div className="flex h-full flex-col">
       {/* Logo / marca */}
@@ -81,13 +92,13 @@ export function SidebarContent() {
 
       {/* Navegação */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-        {NAV_ITEMS.map((item) => (
+        {navItemsWithActive.map(item => (
           <NavItem
             key={item.href}
             href={item.href}
             label={item.label}
             icon={item.icon}
-            active={pathname === item.href || pathname.startsWith(item.href + '/')}
+            active={item.active}
           />
         ))}
       </nav>
