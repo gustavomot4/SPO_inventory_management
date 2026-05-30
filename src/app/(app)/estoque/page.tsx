@@ -493,14 +493,7 @@ function NovaEntradaTab() {
               error={errors.quantity}
               placeholder="Ex: 10"
             />
-            <Input
-              label="Custo unitário"
-              value={costInput}
-              onChange={e => { setCostInput(e.target.value); setErrors(er => ({ ...er, unitCostCents: undefined })) }}
-              error={errors.unitCostCents}
-              placeholder="Ex: 25,90"
-              hint="Opcional — R$"
-            />
+
           </div>
           <Input
             label="Observações"
