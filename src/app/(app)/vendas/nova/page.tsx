@@ -22,11 +22,13 @@ import {
   CARD_PAYMENT_METHODS,
   type PaymentMethod,
 } from '@/lib/enums'
+import { formatBasisPoints } from '@/lib/utils'
 import type {
   ProductListItem,
   ProductResponse,
   VariationResponse,
   CardMachineResponse,
+  CardMachineInstallmentResponse,
   SaleResponse,
   ApiResponse,
   ApiSuccess,
@@ -83,6 +85,8 @@ export default function NovaVendaPage() {
   const [cardMachines, setCardMachines] = useState<CardMachineResponse[]>([])
   const [cardMachineId, setCardMachineId] = useState('')
   const [discountInput, setDiscountInput] = useState('')
+  const [installments, setInstallments] = useState(1)
+  const [machineInstallments, setMachineInstallments] = useState<CardMachineInstallmentResponse[]>([])
 
   // ── Submit ──
   const [submitting, setSubmitting] = useState(false)
@@ -184,7 +188,18 @@ export default function NovaVendaPage() {
   const totalCents = Math.max(0, subtotalCents - discountCents)
 
   const selectedMachine = cardMachines.find(m => m.id === cardMachineId)
-  const feeCents = selectedMachine ? Math.round(totalCents * selectedMachine.feeBasisPoints / 10000) : 0
+  const effectiveFeeBasisPoints = installments > 1
+    ? (machineInstallments.find(i => i.installments === installments)?.feeBasisPoints ?? selectedMachine?.feeBasisPoints ?? 0)
+    : (selectedMachine?.feeBasisPoints ?? 0)
+  const feeCents = selectedMachine ? Math.round(totalCents * effectiveFeeBasisPoints / 10000) : 0
+
+  async function loadMachineInstallments(machineId: string) {
+    try {
+      const res = await fetch(`/api/card-machines/${machineId}/installments`)
+      const j: ApiSuccess<CardMachineInstallmentResponse[]> = await res.json()
+      if ('data' in j) setMachineInstallments(j.data)
+    } catch { /* noop */ }
+  }
 
   // ── Finalizar ──
   async function handleSubmit() {
@@ -204,6 +219,7 @@ export default function NovaVendaPage() {
         body: JSON.stringify({
           paymentMethod,
           cardMachineId: cardMachineId || undefined,
+          installments,
           discountCents,
           items: cart.map(c => ({ variationId: c.variationId, quantity: c.quantity })),
         }),
@@ -478,7 +494,7 @@ export default function NovaVendaPage() {
                 <button
                   key={method}
                   type="button"
-                  onClick={() => { setPaymentMethod(method); setCardMachineId('') }}
+                  onClick={() => { setPaymentMethod(method); setCardMachineId(''); setInstallments(1); setMachineInstallments([]) }}
                   className={cn(
                     'rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors',
                     paymentMethod === method
@@ -497,13 +513,52 @@ export default function NovaVendaPage() {
                 <Select
                   label="Maquininha *"
                   value={cardMachineId}
-                  onChange={e => setCardMachineId(e.target.value)}
+                  onChange={e => {
+                    setCardMachineId(e.target.value)
+                    setInstallments(1)
+                    setMachineInstallments([])
+                    if (e.target.value && paymentMethod === 'CREDIT') loadMachineInstallments(e.target.value)
+                  }}
                   placeholder="Selecione..."
                   options={cardMachines.map(m => ({ value: m.id, label: m.name }))}
                 />
+                {paymentMethod === 'CREDIT' && cardMachineId && machineInstallments.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Parcelas</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setInstallments(1)}
+                        className={cn(
+                          'rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+                          installments === 1
+                            ? 'border-brand-600 bg-brand-50 text-brand-700'
+                            : 'border-border text-foreground hover:border-brand-300'
+                        )}
+                      >
+                        1× à vista ({selectedMachine ? formatBasisPoints(selectedMachine.feeBasisPoints) : ''})
+                      </button>
+                      {machineInstallments.map(inst => (
+                        <button
+                          key={inst.installments}
+                          type="button"
+                          onClick={() => setInstallments(inst.installments)}
+                          className={cn(
+                            'rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+                            installments === inst.installments
+                              ? 'border-brand-600 bg-brand-50 text-brand-700'
+                              : 'border-border text-foreground hover:border-brand-300'
+                          )}
+                        >
+                          {inst.installments}× ({formatBasisPoints(inst.feeBasisPoints)})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {selectedMachine && (
                   <div className="flex justify-between text-xs text-muted-foreground rounded-lg bg-muted/30 px-3 py-2">
-                    <span>Taxa estimada ({(selectedMachine.feeBasisPoints / 100).toFixed(2)}%)</span>
+                    <span>Taxa estimada {installments > 1 ? `${installments}× ` : ''}({formatBasisPoints(effectiveFeeBasisPoints)})</span>
                     <span className="font-medium text-foreground">{formatCurrency(feeCents)}</span>
                   </div>
                 )}

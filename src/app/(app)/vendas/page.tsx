@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Plus, Loader2 } from 'lucide-react'
+import { Plus, Loader2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { cn, formatCurrency, formatDateTime } from '@/lib/utils'
@@ -52,6 +52,7 @@ function SaleRow({ sale }: { sale: SaleListItem }) {
       <div>
         <p className="text-xs text-foreground">{formatDateTime(new Date(sale.createdAt)).split(',')[0]}</p>
         <p className="text-xs text-muted-foreground">{formatDateTime(new Date(sale.createdAt)).split(',')[1]}</p>
+        <p className="text-[10px] font-mono text-muted-foreground/70">#{sale.id.slice(0, 8).toUpperCase()}</p>
       </div>
       <p className="text-sm text-foreground">{sale.paymentMethodLabel}</p>
       <p className="text-sm text-muted-foreground text-center">{sale.itemCount} it.</p>
@@ -92,18 +93,31 @@ export default function VendasPage() {
 
   const [period, setPeriod] = useState<PeriodFilter>('today')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [codeSearch, setCodeSearch] = useState('')
+  const [codeQuery, setCodeQuery] = useState('')
+
+  // Debounce da busca por código
+  useEffect(() => {
+    const t = setTimeout(() => setCodeQuery(codeSearch.trim().toLowerCase()), 400)
+    return () => clearTimeout(t)
+  }, [codeSearch])
 
   const fetchSales = useCallback(async (opts: {
     period: PeriodFilter
     status: StatusFilter
+    code?: string
     cursorParam?: string
     append?: boolean
   }) => {
     const params = new URLSearchParams()
     params.set('pageSize', '20')
-    const dates = getPeriodDates(opts.period)
-    if (dates.dateFrom) params.set('dateFrom', dates.dateFrom)
-    if (dates.dateTo) params.set('dateTo', dates.dateTo)
+    if (opts.code) {
+      params.set('code', opts.code)
+    } else {
+      const dates = getPeriodDates(opts.period)
+      if (dates.dateFrom) params.set('dateFrom', dates.dateFrom)
+      if (dates.dateTo) params.set('dateTo', dates.dateTo)
+    }
     if (opts.status !== 'all') params.set('status', opts.status)
     if (opts.cursorParam) params.set('cursor', opts.cursorParam)
 
@@ -122,13 +136,13 @@ export default function VendasPage() {
 
   useEffect(() => {
     setLoading(true)
-    fetchSales({ period, status: statusFilter }).finally(() => setLoading(false))
-  }, [period, statusFilter, fetchSales])
+    fetchSales({ period, status: statusFilter, code: codeQuery || undefined }).finally(() => setLoading(false))
+  }, [period, statusFilter, codeQuery, fetchSales])
 
   async function handleLoadMore() {
     if (!cursor) return
     setLoadingMore(true)
-    await fetchSales({ period, status: statusFilter, cursorParam: cursor, append: true })
+    await fetchSales({ period, status: statusFilter, code: codeQuery || undefined, cursorParam: cursor, append: true })
     setLoadingMore(false)
   }
 
@@ -180,6 +194,19 @@ export default function VendasPage() {
           <option value="ACTIVE">Ativas</option>
           <option value="CANCELLED">Canceladas</option>
         </select>
+
+        {/* Busca por código */}
+        <div className="relative sm:ml-auto sm:w-44">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="text"
+            value={codeSearch}
+            onChange={e => setCodeSearch(e.target.value.toUpperCase().slice(0, 8))}
+            placeholder="Buscar #CÓDIGO"
+            maxLength={8}
+            className="w-full rounded-lg border border-input bg-background pl-8 pr-3 py-2 text-sm font-mono uppercase placeholder:normal-case placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
       </div>
 
       {/* Lista */}

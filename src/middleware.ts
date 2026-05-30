@@ -18,13 +18,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sessionOptions, type SessionData } from '@/lib/session'
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next()
+  const { pathname } = request.nextUrl
 
+  // GET /api/settings é público — comanda e dashboard lêem sem PIN
+  if (pathname.startsWith('/api/settings') && request.method === 'GET') {
+    return NextResponse.next()
+  }
+
+  const response = NextResponse.next()
   const session = await getIronSession<SessionData>(request, response, sessionOptions)
 
   if (!session.isPinVerified) {
-    const redirectTo = request.nextUrl.pathname
-    const pinUrl = new URL(`/pin?redirect=${encodeURIComponent(redirectTo)}`, request.url)
+    // Rotas de API retornam 401 JSON (não redirect) para não quebrar fetch() no cliente
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'Não autorizado. PIN necessário.', code: 'UNAUTHORIZED' },
+        { status: 401 }
+      )
+    }
+    const pinUrl = new URL(`/pin?redirect=${encodeURIComponent(pathname)}`, request.url)
     return NextResponse.redirect(pinUrl)
   }
 
