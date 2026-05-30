@@ -56,6 +56,16 @@ export type PaginationParams = {
 // CARD MACHINES — MAQU-001
 // ---------------------------------------------------------------------------
 
+export type CardMachineInstallmentResponse = {
+  id: string
+  cardMachineId: string
+  installments: number   // numero de parcelas: 2, 3... 12
+  feeBasisPoints: number // taxa para esse parcelamento em basis points
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export type CardMachineResponse = {
   id: string
   name: string
@@ -63,6 +73,20 @@ export type CardMachineResponse = {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  installments?: CardMachineInstallmentResponse[]  // incluido em GET /[id], omitido no GET da lista
+}
+
+// ---------------------------------------------------------------------------
+// SETTINGS — COM-006
+// ---------------------------------------------------------------------------
+
+export type SettingsResponse = {
+  id: string
+  shopName: string
+  address: string | null
+  phone: string | null
+  updatedAt: string
+  // Nota: pinHash NUNCA exposto
 }
 
 // ---------------------------------------------------------------------------
@@ -206,6 +230,8 @@ export type SaleResponse = {
   notes: string | null
   cancelledAt: string | null
   cancelReason: string | null
+  installments: number
+  installmentFeeBasisPoints: number | null
   items: SaleItemResponse[]
   createdAt: string
   updatedAt: string
@@ -222,5 +248,6 @@ export type SaleListItem = {
   cardMachineName: string | null
   feeCents: number | null
   itemCount: number   // contagem de SaleItems
+  installments: number
   createdAt: string
 }

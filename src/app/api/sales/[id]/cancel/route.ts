@@ -154,6 +154,8 @@ export async function POST(
       cardMachineId: updatedSale.cardMachineId,
       cardMachineName: updatedSale.cardMachine?.name ?? null,
       feeCents: updatedSale.feeCents,
+      installments: updatedSale.installments,
+      installmentFeeBasisPoints: updatedSale.installmentFeeBasisPoints,
       notes: updatedSale.notes,
       cancelledAt: updatedSale.cancelledAt,
       cancelReason: updatedSale.cancelReason,

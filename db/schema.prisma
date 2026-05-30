@@ -1,7 +1,7 @@
 // =============================================================================
 // PRISMA SCHEMA — SPO (Sistema Pimenta Ousada)
-// Database Agent | MVP-004 + DT-004 + DT-005 + DT-007 + PROD-007 | 2026-05-28
-// Versão: 2.3
+// Database Agent | MVP-004 + DT-004 + DT-005 + DT-007 + PROD-007 + DT-010 | 2026-05-29
+// Versão: 2.4
 // =============================================================================
 //
 // Stack: Next.js 14+ + Prisma ORM + SQLite (MVP) → PostgreSQL (v2/cloud)
@@ -12,11 +12,11 @@
 //                   Sale com subtotalCents, discountCents, cardMachineId, feeCents.
 //   v2.1 (DT-004):  Adicionados @map em todos os campos camelCase.
 //   v2.2 (DT-005):  Enums convertidos para String — SQLite não suporta enum no Prisma 5.x.
-//                   Valores válidos documentados em comentário em cada campo.
-//   v2.3 (DT-007):  DateTime→String com dbgenerated (fix do bug de epoch ms do Prisma 5+SQLite).
-//                   O Prisma 5 serializa DateTime como epoch ms no SQLite, causando
-//                   P2023 "Could not convert value" ao ler de volta. String+strftime resolve.
-//           PROD-007: adicionado costCents Int? em Product (preço de custo para margem).
+//   v2.3 (DT-007):  DateTime→String com dbgenerated (fix bug epoch ms Prisma 5+SQLite).
+//                   PROD-007: adicionado costCents Int? em Product.
+//   v2.4 (DT-010):  Settings ganhou address? e phone? (COM-006).
+//                   CardMachineInstallment: nova tabela para taxas de parcelamento (MAQU-003/VEND-007).
+//                   Sale ganhou installments (default 1) e installmentFeeBasisPoints? (VEND-007).
 //
 // CONVENÇÕES:
 //   - Preços SEMPRE em centavos (Int) — nunca Float/Decimal para dinheiro
@@ -79,9 +79,7 @@ model Product {
 
 // ProductVariation = cada combinação única de (tamanho + cor) de um produto.
 // RN-001.3: variações distintas são registros de estoque INDEPENDENTES.
-// DT-008: size e color podem ser string vazia "" para produtos sem variação relevante
-//         (ex: acessórios, "tamanho único"). Validação de obrigatoriedade está na API.
-//         @@unique([productId, size, color]) permanece — ("id", "", "") é combinação única válida.
+// DT-008: size e color podem ser string vazia "" para produtos sem variação relevante.
 model ProductVariation {
   id            String  @id @default(cuid())
   productId     String  @map("product_id")
@@ -130,31 +128,56 @@ model StockEntry {
 }
 
 // =============================================================================
-// SALES — Vendas, itens e maquininhas
+// SALES — Vendas, itens, maquininhas e parcelamento
 // =============================================================================
 
 // CardMachine = maquininha de cartão cadastrada pela dona (RN-010).
-// Taxa em basis points: 199 = 1,99%.
+// feeBasisPoints = taxa à vista (1×) em basis points: 199 = 1,99%.
+// Para taxas por número de parcelas, ver CardMachineInstallment.
 model CardMachine {
   id             String  @id @default(cuid())
   name           String
-  feeBasisPoints Int     @map("fee_basis_points") // ex: 199 = 1,99%
+  feeBasisPoints Int     @map("fee_basis_points") // taxa à vista (1×) — ex: 199 = 1,99%
   isActive       Boolean @default(true) @map("is_active")
   createdAt      String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
   updatedAt      String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
-  sales Sale[]
+  sales        Sale[]
+  installments CardMachineInstallment[]
 
   @@index([isActive])
   @@map("card_machines")
 }
 
+// CardMachineInstallment = taxas por número de parcelas de uma maquininha (MAQU-003/VEND-007).
+// Cada registro representa uma faixa de parcelamento (2x, 3x... 12x) com sua taxa específica.
+// A taxa à vista (1×) usa o campo feeBasisPoints do CardMachine pai.
+model CardMachineInstallment {
+  id             String  @id @default(cuid())
+  cardMachineId  String  @map("card_machine_id")
+  installments   Int     // número de parcelas: 2, 3, 4... 12
+  feeBasisPoints Int     @map("fee_basis_points") // taxa para essa qtd de parcelas (basis points)
+  isActive       Boolean @default(true) @map("is_active")
+  createdAt      String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
+  updatedAt      String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
+
+  cardMachine CardMachine @relation(fields: [cardMachineId], references: [id])
+
+  @@unique([cardMachineId, installments]) // uma taxa por nº de parcelas por maquininha
+  @@index([cardMachineId])
+  @@index([isActive])
+  @@map("card_machine_installments")
+}
+
 // Settings = configurações globais (singleton — 1 único registro).
 // PIN protege relatórios e configurações (RN-007).
+// address e phone são exibidos na comanda (COM-006) — opcionais.
 model Settings {
   id        String  @id @default(cuid())
-  pinHash   String? @map("pin_hash")  // bcrypt hash — null = sem PIN configurado
+  pinHash   String? @map("pin_hash")   // bcrypt hash — null = sem PIN configurado
   shopName  String  @default("Pimenta Ousada") @map("shop_name")
+  address   String? @map("address")   // endereço da loja — exibido na comanda (opcional)
+  phone     String? @map("phone")     // telefone da loja — exibido na comanda (opcional)
   updatedAt String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
   @@map("settings")
@@ -163,22 +186,25 @@ model Settings {
 // Sale = cabeçalho da venda.
 // status:        'ACTIVE' | 'CANCELLED'
 // paymentMethod: 'CASH' | 'PIX' | 'DEBIT' | 'CREDIT'
+// installments:  número de parcelas (1 = à vista)
 model Sale {
-  id            String  @id @default(cuid())
-  status        String  @default("ACTIVE") @map("status")
+  id                        String  @id @default(cuid())
+  status                    String  @default("ACTIVE") @map("status")
   // Valores válidos: 'ACTIVE' | 'CANCELLED'
-  paymentMethod String  @map("payment_method")
+  paymentMethod             String  @map("payment_method")
   // Valores válidos: 'CASH' | 'PIX' | 'DEBIT' | 'CREDIT'
-  subtotalCents Int     @map("subtotal_cents")  // soma dos itens SEM desconto
-  discountCents Int     @default(0) @map("discount_cents") // 0 = sem desconto
-  totalCents    Int     @map("total_cents")     // = subtotalCents - discountCents
-  cardMachineId String? @map("card_machine_id") // null para CASH e PIX
-  feeCents      Int?    @map("fee_cents")       // taxa estimada — informativo
-  notes         String?
-  cancelledAt   String? @map("cancelled_at")   // null = não cancelada
-  cancelReason  String? @map("cancel_reason")
-  createdAt     String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
-  updatedAt     String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
+  subtotalCents             Int     @map("subtotal_cents")               // soma dos itens SEM desconto
+  discountCents             Int     @default(0) @map("discount_cents")   // 0 = sem desconto
+  totalCents                Int     @map("total_cents")                  // = subtotalCents - discountCents
+  cardMachineId             String? @map("card_machine_id")              // null para CASH e PIX
+  feeCents                  Int?    @map("fee_cents")                    // taxa estimada — informativo
+  installments              Int     @default(1) @map("installments")     // parcelas: 1 = à vista (VEND-007)
+  installmentFeeBasisPoints Int?    @map("installment_fee_basis_points") // taxa usada (null se à vista)
+  notes                     String?
+  cancelledAt               String? @map("cancelled_at")                 // null = não cancelada
+  cancelReason              String? @map("cancel_reason")
+  createdAt                 String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
+  updatedAt                 String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
 
   cardMachine CardMachine?    @relation(fields: [cardMachineId], references: [id])
   items       SaleItem[]

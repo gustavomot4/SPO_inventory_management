@@ -6,7 +6,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
@@ -46,8 +45,6 @@ interface ProductFormErrors {
 let draftCounter = 0
 
 export default function NovoProdutoPage() {
-  const router = useRouter()
-
   const [categories, setCategories] = useState<CategoryResponse[]>([])
   const [name, setName] = useState('')
   const [categoryId, setCategoryId] = useState('')

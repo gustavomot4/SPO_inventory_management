@@ -79,6 +79,8 @@ export async function GET(
       cardMachineId: sale.cardMachineId,
       cardMachineName: sale.cardMachine?.name ?? null,
       feeCents: sale.feeCents,
+      installments: sale.installments,
+      installmentFeeBasisPoints: sale.installmentFeeBasisPoints,
       notes: sale.notes,
       cancelledAt: sale.cancelledAt,
       cancelReason: sale.cancelReason,

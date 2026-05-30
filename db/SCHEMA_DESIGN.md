@@ -16,6 +16,7 @@
 | 2.1 | DT-004 | 2026-05-27 | @map adicionado em todos os campos camelCase para gerar colunas snake_case no SQLite |
 | 2.2 | DT-005 | 2026-05-27 | Enums convertidos para String — Prisma 5.x com provider=sqlite não suporta declarações enum |
 | 2.3 | DT-007 + PROD-007 | 2026-05-28 | DateTime→String/dbgenerated (fix bug epoch ms P2023). costCents Int? adicionado em Product. DT-008: size/color documentados como opcionais na API |
+| 2.4 | DT-010 | 2026-05-29 | Settings: +address?, +phone? (COM-006). CardMachineInstallment: nova tabela para taxas de parcelamento (MAQU-003/VEND-007). Sale: +installments (default 1), +installmentFeeBasisPoints? (VEND-007) |
 
 ---
 
@@ -180,7 +181,46 @@ Esse bug se manifesta na primeira operação de UPDATE em qualquer tabela.
 
 ---
 
-### 2.9 Campos de enum → String (DT-005)
+### 2.9 Settings — endereço e telefone (DT-010 / COM-006)
+
+**Decisão:** Adicionados `address String?` e `phone String?` ao model `Settings`.
+
+**Finalidade:** Exibição na comanda térmica customizável. A dona da loja pode preencher o endereço e telefone na tela de configurações, e esses dados aparecem no cabeçalho da comanda impressa.
+
+**Opcionais:** Se `null`, a comanda simplesmente omite as linhas de endereço/telefone — compatível com o comportamento já implementado pelo Frontend Agent em `vendas/[id]/page.tsx`.
+
+---
+
+### 2.10 CardMachineInstallment — taxas de parcelamento (DT-010 / MAQU-003 / VEND-007)
+
+**Decisão:** Novo model `CardMachineInstallment` com relação N:1 para `CardMachine`.
+
+**Motivação:** Maquininhas de cartão cobram taxas diferentes dependendo do número de parcelas. O campo `feeBasisPoints` em `CardMachine` representa a taxa à vista (1×) e permanece como fallback. Para 2x, 3x... 12x, as taxas ficam em registros de `CardMachineInstallment`.
+
+**Constraint `@@unique([cardMachineId, installments])`:** garante uma única taxa por faixa de parcelamento por maquininha.
+
+**Para o Backend Agent:** Ao finalizar uma venda parcelada no crédito:
+1. Buscar `CardMachineInstallment` onde `cardMachineId = X` e `installments = N` e `isActive = true`
+2. Se existir: usar `feeBasisPoints` desse registro para calcular `feeCents`; gravar em `Sale.installmentFeeBasisPoints`
+3. Se não existir: usar `CardMachine.feeBasisPoints` como fallback (taxa à vista aplicada a todas as parcelas)
+4. Gravar `Sale.installments = N`
+
+---
+
+### 2.11 Sale — campos de parcelamento (DT-010 / VEND-007)
+
+**Decisão:** Adicionados `installments Int @default(1)` e `installmentFeeBasisPoints Int?` ao model `Sale`.
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `installments` | `Int` default 1 | Número de parcelas. 1 = à vista. Vendas existentes assumem 1. |
+| `installmentFeeBasisPoints` | `Int?` | Taxa em basis points usada no cálculo de `feeCents`. null = à vista ou sem maquininha. |
+
+**Imutabilidade:** Como `SaleItem.unitPriceCents`, esses campos são gravados no momento da venda e nunca atualizados — preservam o snapshot da taxa aplicada.
+
+---
+
+### 2.12 Campos de enum → String (DT-005)
 
 **Decisão:** Todos os campos que seriam enum no Prisma são declarados como `String`. Os valores válidos são documentados em comentário no schema.
 

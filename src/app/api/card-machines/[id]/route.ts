@@ -22,6 +22,12 @@ export async function GET(
   try {
     const machine = await prisma.cardMachine.findUnique({
       where: { id: params.id },
+      include: {
+        installments: {
+          where: { isActive: true },
+          orderBy: { installments: 'asc' },
+        },
+      },
     })
 
     if (!machine) {
@@ -39,6 +45,15 @@ export async function GET(
         isActive: machine.isActive,
         createdAt: machine.createdAt,
         updatedAt: machine.updatedAt,
+        installments: machine.installments.map((inst) => ({
+          id: inst.id,
+          cardMachineId: inst.cardMachineId,
+          installments: inst.installments,
+          feeBasisPoints: inst.feeBasisPoints,
+          isActive: inst.isActive,
+          createdAt: inst.createdAt,
+          updatedAt: inst.updatedAt,
+        })),
       },
     })
   } catch (error) {

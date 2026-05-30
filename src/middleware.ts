@@ -35,5 +35,6 @@ export const config = {
   matcher: [
     '/configuracoes/:path*',
     '/relatorios/:path*',
+    '/api/settings/:path*',
   ],
 }
