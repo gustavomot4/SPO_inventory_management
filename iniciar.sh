@@ -38,7 +38,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # Criar/aplicar migrations do banco de dados
-if [ ! -f "dev.db" ]; then
+if [ ! -f "prisma/dev.db" ]; then
     echo "[INFO] Criando banco de dados pela primeira vez..."
     npx prisma migrate deploy
     echo "[OK] Banco de dados criado."
