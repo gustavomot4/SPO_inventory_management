@@ -1,18 +1,17 @@
 // =============================================================================
 // GET /api/reports/stock  -- relatorio de posicao de estoque
-// SPO -- Sistema Pimenta Ousada | REL-001
+// SPO -- Sistema Pimenta Ousada | REL-001 + REL-005
 // =============================================================================
 // Acesso: Protegido por PIN (middleware cobre /api/reports/:path*)
-//
 // Query: ?status=all|ok|low|out  ?categoryId=xxx
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getStockStatus } from '@/lib/utils'
-import type { ApiSuccess, ApiError, StockReportItem, StockReportMeta } from '@/types'
+import type { ApiError, StockReportItem, StockReportMeta } from '@/types'
 
-type StockReportSuccess = ApiSuccess<StockReportItem[]> & { meta: StockReportMeta }
+type StockReportSuccess = { data: StockReportItem[]; meta: StockReportMeta }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -39,7 +38,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
       include: {
         product: {
-          include: { category: { select: { name: true } } },
+          select: {
+            name: true,
+            priceCents: true,
+            costCents: true,
+            category: { select: { name: true } },
+          },
         },
       },
       orderBy: [
@@ -52,18 +56,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const statusOrder: Record<string, number> = { out: 0, low: 1, ok: 2 }
 
     const items: StockReportItem[] = variations
-      .map((v) => ({
-        variationId: v.id,
-        variationSku: v.sku,
-        productId: v.productId,
-        productName: v.product.name,
-        categoryName: v.product.category.name,
-        size: v.size,
-        color: v.color,
-        stockQuantity: v.stockQuantity,
-        minStock: v.minStock,
-        status: getStockStatus(v.stockQuantity, v.minStock) as 'ok' | 'low' | 'out',
-      }))
+      .map((v) => {
+        const priceCents = v.product.priceCents
+        const costCents = v.product.costCents ?? null
+        const stockValueCents = v.stockQuantity * priceCents
+        const stockCostCents = costCents !== null ? v.stockQuantity * costCents : null
+
+        return {
+          variationId: v.id,
+          variationSku: v.sku,
+          productId: v.productId,
+          productName: v.product.name,
+          categoryName: v.product.category.name,
+          size: v.size,
+          color: v.color,
+          stockQuantity: v.stockQuantity,
+          minStock: v.minStock,
+          status: getStockStatus(v.stockQuantity, v.minStock) as 'ok' | 'low' | 'out',
+          priceCents,
+          costCents,
+          stockValueCents,
+          stockCostCents,
+        }
+      })
       .filter((item) => statusParam === 'all' || item.status === statusParam)
 
     items.sort(
@@ -72,11 +87,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         a.productName.localeCompare(b.productName)
     )
 
+    const totalStockValueCents = items.reduce((sum, i) => sum + i.stockValueCents, 0)
+    const itemsWithCost = items.filter((i) => i.stockCostCents !== null)
+    const totalStockCostCents =
+      itemsWithCost.length > 0
+        ? itemsWithCost.reduce((sum, i) => sum + (i.stockCostCents as number), 0)
+        : null
+    const estimatedPotentialProfitCents =
+      totalStockCostCents !== null ? totalStockValueCents - totalStockCostCents : null
+
     const meta: StockReportMeta = {
       total: items.length,
       outCount: items.filter((i) => i.status === 'out').length,
       lowCount: items.filter((i) => i.status === 'low').length,
       okCount: items.filter((i) => i.status === 'ok').length,
+      totalStockValueCents,
+      totalStockCostCents,
+      estimatedPotentialProfitCents,
     }
 
     const response: StockReportSuccess = { data: items, meta }

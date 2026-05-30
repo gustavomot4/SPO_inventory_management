@@ -10,14 +10,13 @@
 // =============================================================================
 
 import { useState, useRef, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Flame, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const PIN_LENGTH = 4
 
 function PinScreen() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect') ?? '/produtos'
 
