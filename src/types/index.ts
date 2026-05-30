@@ -267,6 +267,10 @@ export type StockReportItem = {
   stockQuantity: number
   minStock: number
   status: 'ok' | 'low' | 'out'
+  priceCents: number
+  costCents: number | null
+  stockValueCents: number
+  stockCostCents: number | null
 }
 
 export type StockReportMeta = {
@@ -274,6 +278,9 @@ export type StockReportMeta = {
   okCount: number
   lowCount: number
   outCount: number
+  totalStockValueCents: number
+  totalStockCostCents: number | null
+  estimatedPotentialProfitCents: number | null
 }
 
 export type SalesReportSummary = {
@@ -282,6 +289,9 @@ export type SalesReportSummary = {
   totalDiscount: number
   averageTicketCents: number
   cancelledCount: number
+  estimatedCostCents: number | null
+  estimatedProfitCents: number | null
+  estimatedMarginPct: number | null
 }
 
 export type SalesByPaymentMethod = {
@@ -299,6 +309,8 @@ export type TopVariation = {
   color: string
   quantitySold: number
   revenueCents: number
+  costPerUnitCents: number | null
+  estimatedProfitCents: number | null
 }
 
 export type SalesByDay = {

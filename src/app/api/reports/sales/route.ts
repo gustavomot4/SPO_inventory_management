@@ -1,11 +1,12 @@
 // =============================================================================
 // GET /api/reports/sales  -- relatorio de vendas por periodo
-// SPO -- Sistema Pimenta Ousada | REL-002
+// SPO -- Sistema Pimenta Ousada | REL-002 + REL-005
 // =============================================================================
 // Acesso: Protegido por PIN (middleware cobre /api/reports/:path*)
+// Query: ?dateFrom=2026-05-01  ?dateTo=2026-05-31 (padrao: ultimos 30 dias)
 //
-// Query: ?dateFrom=2026-05-01  ?dateTo=2026-05-31
-//        Padrao: ultimos 30 dias
+// Custo/lucro sao ESTIMATIVAS baseadas no costCents atual do produto,
+// nao num snapshot historico do momento da venda.
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -29,20 +30,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const dateFrom = searchParams.get('dateFrom') || undefined
     const dateTo = searchParams.get('dateTo') || undefined
 
-    // Padrao: ultimos 30 dias
     const now = new Date()
     const todayEnd = now.toISOString().slice(0, 10) + 'T23:59:59.999Z'
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10) + 'T00:00:00.000Z'
+    const thirtyDaysAgo =
+      new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) +
+      'T00:00:00.000Z'
 
     const from = dateFrom ? dateFrom + 'T00:00:00.000Z' : thirtyDaysAgo
     const to   = dateTo   ? dateTo   + 'T23:59:59.999Z' : todayEnd
 
     const sales = await prisma.sale.findMany({
-      where: {
-        createdAt: { gte: from, lte: to },
-      },
+      where: { createdAt: { gte: from, lte: to } },
       include: {
         items: {
           include: {
@@ -51,7 +49,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                 sku: true,
                 size: true,
                 color: true,
-                product: { select: { name: true } },
+                product: {
+                  select: {
+                    name: true,
+                    costCents: true, // estimativa -- baseada no custo atual do produto
+                  },
+                },
               },
             },
           },
@@ -63,9 +66,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const activeSales = sales.filter((s) => s.status === SALE_STATUS.ACTIVE)
     const cancelledSales = sales.filter((s) => s.status === SALE_STATUS.CANCELLED)
 
-    // --- Summary ---
     const totalRevenue = activeSales.reduce((sum, s) => sum + s.totalCents, 0)
     const totalDiscount = activeSales.reduce((sum, s) => sum + s.discountCents, 0)
+
+    // estimativa de custo -- baseada no custo atual do produto (nao e snapshot)
+    let totalEstimatedCostCents = 0
+    let hasAnyCostData = false
+
+    for (const sale of activeSales) {
+      for (const item of sale.items) {
+        const costPerUnit = item.variation.product.costCents ?? null
+        if (costPerUnit !== null) {
+          totalEstimatedCostCents += costPerUnit * item.quantity
+          hasAnyCostData = true
+        }
+      }
+    }
+
+    const estimatedCostCents = hasAnyCostData ? totalEstimatedCostCents : null
+    const estimatedProfitCents =
+      estimatedCostCents !== null ? totalRevenue - estimatedCostCents : null
+    const estimatedMarginPct =
+      estimatedProfitCents !== null && totalRevenue > 0
+        ? Math.round((estimatedProfitCents / totalRevenue) * 100)
+        : null
 
     const summary: SalesReportSummary = {
       totalSales: activeSales.length,
@@ -74,9 +98,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       averageTicketCents:
         activeSales.length > 0 ? Math.round(totalRevenue / activeSales.length) : 0,
       cancelledCount: cancelledSales.length,
+      estimatedCostCents,
+      estimatedProfitCents,
+      estimatedMarginPct,
     }
 
-    // --- byPaymentMethod (apenas vendas ativas) ---
+    // byPaymentMethod (apenas vendas ativas)
     const methodMap = new Map<string, { count: number; totalCents: number }>()
     for (const sale of activeSales) {
       const existing = methodMap.get(sale.paymentMethod) ?? { count: 0, totalCents: 0 }
@@ -94,11 +121,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }))
       .sort((a, b) => b.totalCents - a.totalCents)
 
-    // --- topVariations (top 10 por quantidade, apenas itens de vendas ativas) ---
-    const varMap = new Map<
-      string,
-      { sku: string; size: string; color: string; productName: string; qty: number; revenue: number }
-    >()
+    // topVariations (top 10 por quantidade, apenas itens de vendas ativas)
+    type VarAcc = {
+      sku: string
+      size: string
+      color: string
+      productName: string
+      costPerUnitCents: number | null
+      qty: number
+      revenue: number
+    }
+    const varMap = new Map<string, VarAcc>()
+
     for (const sale of activeSales) {
       for (const item of sale.items) {
         const existing = varMap.get(item.variationId) ?? {
@@ -106,6 +140,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           size: item.variation.size,
           color: item.variation.color,
           productName: item.variation.product.name,
+          costPerUnitCents: item.variation.product.costCents ?? null,
           qty: 0,
           revenue: 0,
         }
@@ -116,20 +151,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         })
       }
     }
+
     const topVariations: TopVariation[] = Array.from(varMap.entries())
-      .map(([variationId, data]) => ({
-        variationId,
-        variationSku: data.sku,
-        productName: data.productName,
-        size: data.size,
-        color: data.color,
-        quantitySold: data.qty,
-        revenueCents: data.revenue,
-      }))
+      .map(([variationId, v]) => {
+        const costPerUnitCents = v.costPerUnitCents
+        const avgUnitPrice = v.qty > 0 ? Math.round(v.revenue / v.qty) : 0
+        const estimatedProfitCents =
+          costPerUnitCents !== null ? (avgUnitPrice - costPerUnitCents) * v.qty : null
+        return {
+          variationId,
+          variationSku: v.sku,
+          productName: v.productName,
+          size: v.size,
+          color: v.color,
+          quantitySold: v.qty,
+          revenueCents: v.revenue,
+          costPerUnitCents,
+          estimatedProfitCents,
+        }
+      })
       .sort((a, b) => b.quantitySold - a.quantitySold)
       .slice(0, 10)
 
-    // --- byDay (apenas vendas ativas, agrupar por data YYYY-MM-DD) ---
+    // byDay (apenas vendas ativas)
     const dayMap = new Map<string, { count: number; revenueCents: number }>()
     for (const sale of activeSales) {
       const day = sale.createdAt.slice(0, 10)
