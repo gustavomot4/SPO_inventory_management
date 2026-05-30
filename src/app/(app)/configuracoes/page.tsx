@@ -14,13 +14,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { CreditCard, Lock, Store, Plus, Pencil, X, Check, ChevronDown, Trash2, Loader2 } from 'lucide-react'
+import { CreditCard, Lock, Store, Plus, Pencil, X, Check, ChevronDown, Trash2, Loader2, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatBasisPoints, parseBasisPoints, cn } from '@/lib/utils'
-import type { CardMachineResponse, CardMachineInstallmentResponse, SettingsResponse, ApiResponse, ApiSuccess } from '@/types'
+import type { CardMachineResponse, CardMachineInstallmentResponse, SettingsResponse, CategoryResponse, ApiResponse, ApiSuccess } from '@/types'
 
 // ---------------------------------------------------------------------------
 // Tipos locais
@@ -56,6 +56,7 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
   const [errors, setErrors] = useState<FormErrors>({})
   const [saving, setSaving] = useState(false)
   const [toggling, setToggling] = useState(false)
+  const [confirmInactivate, setConfirmInactivate] = useState(false)
 
   // ── Parcelamentos ──
   const [showInstallments, setShowInstallments] = useState(false)
@@ -106,7 +107,9 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
       }
       if ('data' in json) setInstallments(p => [...p, json.data].sort((a, b) => a.installments - b.installments))
       setNewInstFee('')
-      setNewInstQty('2')
+      // Reset para a proxima parcela disponivel (nao hardcodar '2')
+      const nextAvailable = availableQtys.find(n => n !== qty)
+      setNewInstQty(nextAvailable ? String(nextAvailable) : '2')
     } catch { setInstError('Erro de conexão') } finally { setAddingInst(false) }
   }
 
@@ -172,6 +175,7 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
     setToggling(true)
     await onToggleActive(machine.id, machine.isActive)
     setToggling(false)
+    setConfirmInactivate(false)
   }
 
   if (editing) {
@@ -244,9 +248,50 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
           <Button size="sm" variant="ghost" onClick={() => setEditing(true)} aria-label={`Editar ${machine.name}`}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant={machine.isActive ? 'secondary' : 'ghost'} loading={toggling} onClick={handleToggle} className="text-xs">
-            {machine.isActive ? 'Inativar' : 'Ativar'}
-          </Button>
+          {machine.isActive ? (
+            confirmInactivate ? (
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground">Inativar?</span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  loading={toggling}
+                  onClick={handleToggle}
+                  className="h-6 px-2 text-[10px]"
+                >
+                  Sim
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setConfirmInactivate(false)}
+                  className="h-6 px-1"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={toggling}
+                onClick={() => setConfirmInactivate(true)}
+                className="text-xs"
+              >
+                Inativar
+              </Button>
+            )
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={toggling}
+              onClick={handleToggle}
+              className="text-xs"
+            >
+              Ativar
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={toggleInstallments} className="text-xs gap-1">
             Parcelas
             <ChevronDown className={cn('h-3 w-3 transition-transform', showInstallments && 'rotate-180')} />
@@ -347,6 +392,20 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
 // ---------------------------------------------------------------------------
 
 export default function ConfiguracoesPage() {
+  // ── State: Categorias ──
+  const [categories, setCategories] = useState<CategoryResponse[]>([])
+  const [loadingCats, setLoadingCats] = useState(true)
+  const [catName, setCatName] = useState('')
+  const [catNameError, setCatNameError] = useState<string | undefined>()
+  const [catAddError, setCatAddError] = useState<string | null>(null)
+  const [addingCat, setAddingCat] = useState(false)
+  const [editingCatId, setEditingCatId] = useState<string | null>(null)
+  const [editCatName, setEditCatName] = useState('')
+  const [editCatError, setEditCatError] = useState<string | undefined>()
+  const [savingCat, setSavingCat] = useState(false)
+  const [togglingCat, setTogglingCat] = useState<string | null>(null)
+  const [confirmInactivateCat, setConfirmInactivateCat] = useState<string | null>(null)
+
   // ── State: Maquininhas ──
   const [machines, setMachines] = useState<CardMachineResponse[]>([])
   const [loading, setLoading] = useState(true)
@@ -397,6 +456,88 @@ export default function ConfiguracoesPage() {
       setTimeout(() => setSettingsSaved(false), 3000)
     } catch { setSettingsError('Erro de conexão. Tente novamente.') }
     finally { setSavingSettings(false) }
+  }
+
+  // ── Carregar categorias ──
+  const loadCategories = useCallback(async () => {
+    try {
+      const res = await fetch('/api/categories?includeInactive=true', { cache: 'no-store' })
+      const json: ApiResponse<CategoryResponse[]> = await res.json()
+      if ('data' in json) setCategories(json.data)
+    } catch { /* silencioso */ } finally { setLoadingCats(false) }
+  }, [])
+
+  useEffect(() => { loadCategories() }, [loadCategories])
+
+  async function handleAddCategory() {
+    if (!catName.trim()) { setCatNameError('Nome obrigatorio'); return }
+    if (catName.trim().length > 80) { setCatNameError('Maximo 80 caracteres'); return }
+    setCatNameError(undefined)
+    setAddingCat(true)
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: catName.trim() }),
+      })
+      const json: ApiResponse<CategoryResponse> = await res.json()
+      if (!res.ok) {
+        const code = 'code' in json ? (json as { code?: string }).code : undefined
+        setCatAddError(code === 'NAME_TAKEN' ? 'Ja existe uma categoria com este nome' : 'error' in json ? json.error : 'Erro ao adicionar')
+        return
+      }
+      if ('data' in json) setCategories(prev => [...prev, json.data].sort((a, b) => a.name.localeCompare(b.name)))
+      setCatName('')
+      setCatAddError(null)
+    } catch { setCatAddError('Erro de conexao. Tente novamente.') }
+    finally { setAddingCat(false) }
+  }
+
+  function startEditCat(cat: CategoryResponse) {
+    setEditingCatId(cat.id)
+    setEditCatName(cat.name)
+    setEditCatError(undefined)
+  }
+
+  function cancelEditCat() {
+    setEditingCatId(null)
+    setEditCatName('')
+    setEditCatError(undefined)
+  }
+
+  async function handleSaveCategory() {
+    if (!editCatName.trim()) { setEditCatError('Nome obrigatorio'); return }
+    setSavingCat(true)
+    try {
+      const res = await fetch('/api/categories/' + editingCatId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editCatName.trim() }),
+      })
+      const json: ApiResponse<CategoryResponse> = await res.json()
+      if (!res.ok) {
+        const code = 'code' in json ? (json as { code?: string }).code : undefined
+        setEditCatError(code === 'NAME_TAKEN' ? 'Ja existe uma categoria com este nome' : 'Erro ao salvar')
+        return
+      }
+      if ('data' in json) setCategories(prev => prev.map(c => c.id === editingCatId ? json.data : c))
+      cancelEditCat()
+    } catch { setEditCatError('Erro de conexao.') }
+    finally { setSavingCat(false) }
+  }
+
+  async function handleToggleCategory(id: string, currentlyActive: boolean) {
+    setTogglingCat(id)
+    try {
+      const res = await fetch('/api/categories/' + id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !currentlyActive }),
+      })
+      const json: ApiResponse<CategoryResponse> = await res.json()
+      if ('data' in json) setCategories(prev => prev.map(c => c.id === id ? json.data : c))
+    } catch { loadCategories() }
+    finally { setTogglingCat(null); setConfirmInactivateCat(null) }
   }
 
   // ── Carregar maquininhas ──
@@ -478,6 +619,126 @@ export default function ConfiguracoesPage() {
           Área protegida
         </span>
       </div>
+
+      {/* ── Categorias ── */}
+      <section className="mb-6">
+        <p className="mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+          Categorias de Produto
+        </p>
+        <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+          {/* Formulario de adicao */}
+          <div className="px-6 py-4 border-b border-border bg-muted/30">
+            <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+              <Plus className="h-4 w-4 text-brand-600" />
+              Adicionar categoria
+            </p>
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <Input
+                  label="Nome"
+                  value={catName}
+                  onChange={e => { setCatName(e.target.value); setCatNameError(undefined) }}
+                  error={catNameError}
+                  placeholder="Ex: Blusas, Vestidos, Calcas"
+                  onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+                />
+              </div>
+              <div className="pb-0.5">
+                <Button onClick={handleAddCategory} loading={addingCat} size="md">
+                  <Plus className="h-3.5 w-3.5" /> Adicionar
+                </Button>
+              </div>
+            </div>
+            {catAddError && <p className="mt-2 text-xs text-destructive">{catAddError}</p>}
+          </div>
+
+          {/* Lista */}
+          {loadingCats ? (
+            <div className="divide-y divide-border">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="px-6 py-4 flex items-center gap-4">
+                  <div className="h-4 w-28 bg-muted animate-pulse rounded flex-1" />
+                  <div className="h-5 w-14 bg-muted animate-pulse rounded-full" />
+                </div>
+              ))}
+            </div>
+          ) : categories.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                <Tag className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+              </div>
+              <p className="text-sm font-medium text-foreground">Nenhuma categoria cadastrada</p>
+              <p className="mt-1 text-xs text-muted-foreground">Adicione uma categoria acima para comecar.</p>
+            </div>
+          ) : (
+            <div>
+              {categories.map(cat => (
+                editingCatId === cat.id ? (
+                  <div key={cat.id} className="border-b border-border last:border-0 px-6 py-4 bg-brand-50/30 flex items-end gap-3">
+                    <div className="flex-1">
+                      <Input
+                        label="Nome"
+                        value={editCatName}
+                        onChange={e => { setEditCatName(e.target.value); setEditCatError(undefined) }}
+                        error={editCatError}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pb-0.5">
+                      <Button size="sm" loading={savingCat} onClick={handleSaveCategory}>
+                        <Check className="h-3.5 w-3.5" /> Salvar
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={cancelEditCat}>
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div key={cat.id} className="border-b border-border last:border-0 px-6 py-4 flex items-center gap-4 hover:bg-muted/50 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className={cn('text-sm font-medium truncate', !cat.isActive && 'text-muted-foreground line-through')}>
+                        {cat.name}
+                      </p>
+                    </div>
+                    <Badge variant={cat.isActive ? 'success' : 'muted'}>
+                      {cat.isActive ? 'Ativa' : 'Inativa'}
+                    </Badge>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button size="sm" variant="ghost" onClick={() => startEditCat(cat)} aria-label={"Editar " + cat.name}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {cat.isActive ? (
+                        confirmInactivateCat === cat.id ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">Inativar?</span>
+                            <Button size="sm" variant="destructive" loading={togglingCat === cat.id}
+                              onClick={() => handleToggleCategory(cat.id, true)} className="h-6 px-2 text-[10px]">
+                              Sim
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setConfirmInactivateCat(null)} className="h-6 px-1">
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button size="sm" variant="secondary" className="text-xs"
+                            onClick={() => setConfirmInactivateCat(cat.id)}>
+                            Inativar
+                          </Button>
+                        )
+                      ) : (
+                        <Button size="sm" variant="ghost" className="text-xs" loading={togglingCat === cat.id}
+                          onClick={() => handleToggleCategory(cat.id, false)}>
+                          Ativar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* ── Maquininhas de Cartão ── */}
       <section className="mb-6">

@@ -248,6 +248,62 @@ export async function PATCH(
         { status: 404 }
       )
     }
+    console.error('[PATCH /api/products/[id]]', error)
+    return NextResponse.json<ApiError>(
+      { error: 'Erro interno do servidor', code: 'INTERNAL_ERROR' },
+      { status: 500 }
+    )
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /api/products/[id]
+// Soft delete: deletedAt = ISO string + isActive = false
+// Produto desaparece da listagem padrão mas histórico de SaleItems é preservado
+// ---------------------------------------------------------------------------
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: RouteContext
+): Promise<NextResponse> {
+  try {
+    const product = await prisma.product.update({
+      where: { id: params.id },
+      data: {
+        deletedAt: new Date().toISOString(),
+        isActive: false,
+      },
+      include: {
+        category: { select: { name: true } },
+        variations: {
+          orderBy: [{ size: 'asc' }, { color: 'asc' }],
+        },
+      },
+    })
+
+    return NextResponse.json<ApiSuccess<ProductResponse>>({
+      data: {
+        id: product.id,
+        name: product.name,
+        categoryId: product.categoryId,
+        categoryName: product.category.name,
+        priceCents: product.priceCents,
+        costCents: product.costCents,
+        isActive: product.isActive,
+        deletedAt: product.deletedAt,
+        variations: product.variations.map(formatVariation),
+        createdAt: product.createdAt,
+        updatedAt: product.updatedAt,
+      },
+    })
+  } catch (error) {
+    const prismaError = error as { code?: string }
+    if (prismaError.code === 'P2025') {
+      return NextResponse.json<ApiError>(
+        { error: 'Produto não encontrado', code: 'NOT_FOUND' },
+        { status: 404 }
+      )
+    }
     console.error('[DELETE /api/products/[id]]', error)
     return NextResponse.json<ApiError>(
       { error: 'Erro interno do servidor', code: 'INTERNAL_ERROR' },

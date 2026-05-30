@@ -24,6 +24,8 @@ import {
   Trash2,
   Loader2,
   AlertTriangle,
+  CheckCircle2,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -78,6 +80,7 @@ function VariationRow({ variation, onUpdate, onDeactivate }: VariationRowProps) 
   const [minValue, setMinValue] = useState(String(variation.minStock))
   const [saving, setSaving] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleSaveMin() {
@@ -95,6 +98,7 @@ function VariationRow({ variation, onUpdate, onDeactivate }: VariationRowProps) 
     setDeactivating(true)
     await onDeactivate(variation.id)
     setDeactivating(false)
+    setConfirmDeactivate(false)
   }
 
   const stockBadge = variation.stockQuantity === 0
@@ -172,16 +176,39 @@ function VariationRow({ variation, onUpdate, onDeactivate }: VariationRowProps) 
           <Badge variant="muted">Inativa</Badge>
         )}
         {variation.isActive && (
-          <Button
-            size="sm"
-            variant="ghost"
-            loading={deactivating}
-            onClick={handleDeactivate}
-            className="text-muted-foreground hover:text-destructive"
-            aria-label={`Inativar variação ${variation.sku}`}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          confirmDeactivate ? (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Inativar?</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                loading={deactivating}
+                onClick={handleDeactivate}
+                className="h-6 px-2 text-[10px]"
+              >
+                Sim
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setConfirmDeactivate(false)}
+                className="h-6 px-1"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={deactivating}
+              onClick={() => setConfirmDeactivate(true)}
+              className="text-muted-foreground hover:text-destructive"
+              aria-label={'Inativar variação ' + variation.sku}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )
         )}
       </div>
       {error && (
@@ -204,6 +231,7 @@ export default function ProdutoDetalhePage() {
   const [categories, setCategories] = useState<CategoryResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [networkError, setNetworkError] = useState(false)
 
   // Campos editáveis do produto
   const [name, setName] = useState('')
@@ -224,6 +252,7 @@ export default function ProdutoDetalhePage() {
   // Inativar / Reativar produto
   const [deletingProduct, setDeletingProduct] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [reactivating, setReactivating] = useState(false)
 
   // ── Carregar produto e categorias ──
@@ -249,7 +278,7 @@ export default function ProdutoDetalhePage() {
       }
       if ('data' in catJson) setCategories(catJson.data)
     } catch {
-      setNotFound(true)
+      setNetworkError(true)
     } finally {
       setLoading(false)
     }
@@ -402,12 +431,19 @@ export default function ProdutoDetalhePage() {
   // ── Inativar produto ──
   async function handleDeleteProduct() {
     setDeletingProduct(true)
+    setDeleteError(null)
     try {
-      await fetch(`/api/products/${productId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/products/${productId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        setDeleteError('error' in json ? (json as { error: string }).error : 'Erro ao inativar produto. Tente novamente.')
+        setDeletingProduct(false)
+        return
+      }
       router.replace('/produtos')
     } catch {
+      setDeleteError('Erro de conexao. Tente novamente.')
       setDeletingProduct(false)
-      setConfirmDelete(false)
     }
   }
 
@@ -436,10 +472,27 @@ export default function ProdutoDetalhePage() {
     )
   }
 
+  if (networkError) {
+    return (
+      <div className="px-4 py-16 text-center">
+        <p className="text-sm font-medium text-foreground">Nao foi possivel carregar o produto</p>
+        <p className="text-sm text-muted-foreground mt-1">Verifique sua conexao e tente novamente.</p>
+        <div className="flex items-center justify-center gap-3 mt-4">
+          <Button onClick={() => { setNetworkError(false); setLoading(true); loadProduct() }}>
+            Tentar novamente
+          </Button>
+          <Link href="/produtos">
+            <Button variant="secondary">Voltar para Produtos</Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   if (notFound || !product) {
     return (
       <div className="px-4 py-16 text-center">
-        <p className="text-sm font-medium text-foreground">Produto não encontrado</p>
+        <p className="text-sm font-medium text-foreground">Produto nao encontrado</p>
         <Link href="/produtos">
           <Button variant="secondary" className="mt-4">Voltar para Produtos</Button>
         </Link>
@@ -528,10 +581,12 @@ export default function ProdutoDetalhePage() {
               onClick={handleSaveProduct}
               loading={savingProduct}
             >
-              {savedProduct ? '✓ Salvo' : 'Salvar alterações'}
+              Salvar alterações
             </Button>
             {savedProduct && (
-              <p className="text-sm text-green-600">Alterações salvas</p>
+              <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Salvo!
+              </span>
             )}
           </div>
         </div>
@@ -700,11 +755,14 @@ export default function ProdutoDetalhePage() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => setConfirmDelete(false)}
+                      onClick={() => { setConfirmDelete(false); setDeleteError(null) }}
                     >
                       Cancelar
                     </Button>
                   </div>
+                  {deleteError && (
+                    <p className="mt-2 text-xs text-destructive">{deleteError}</p>
+                  )}
                 </div>
               </div>
             )}
