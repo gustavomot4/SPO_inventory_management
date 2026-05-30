@@ -1,12 +1,12 @@
 @echo off
-chcp 65001 >nul
+setlocal enabledelayedexpansion
 echo.
 echo ============================================================
-echo  PIMENTA OUSADA — Sistema de Gestao de Estoque
+echo  PIMENTA OUSADA - Sistema de Gestao de Estoque
 echo ============================================================
 echo.
 
-:: Verificar se Node.js está instalado
+:: Verificar se Node.js esta instalado
 where node >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERRO] Node.js nao encontrado no sistema.
@@ -19,16 +19,16 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-:: Verificar versão mínima do Node.js (v18+)
+:: Verificar versao minima do Node.js (v18+)
 for /f "tokens=1 delims=v" %%i in ('node --version') do set NODE_VERSION=%%i
 for /f "tokens=1 delims=." %%i in ("%NODE_VERSION%") do set NODE_MAJOR=%%i
 if %NODE_MAJOR% lss 18 (
-    echo [AVISO] Node.js v%NODE_VERSION% detectado. Recomendado: v20 LTS ou superior.
+    echo [AVISO] Node.js v%NODE_VERSION% detectado. Recomendado: v20 LTS.
     echo Continuando mesmo assim...
     echo.
 )
 
-:: Instalar dependências se node_modules não existir
+:: Instalar dependencias se node_modules nao existir
 if not exist "node_modules\" (
     echo [INFO] Instalando dependencias pela primeira vez...
     echo       Isso pode levar alguns minutos. Aguarde.
@@ -45,8 +45,8 @@ if not exist "node_modules\" (
     echo.
 )
 
-:: Criar/aplicar migrations do banco de dados
-if not exist "dev.db" (
+:: Aplicar migrations do banco de dados
+if not exist "prisma\dev.db" (
     echo [INFO] Criando banco de dados pela primeira vez...
     npx prisma migrate deploy
     if %errorlevel% neq 0 (
@@ -57,16 +57,16 @@ if not exist "dev.db" (
     echo [OK] Banco de dados criado.
     echo.
 ) else (
-    echo [INFO] Aplicando atualizacoes do banco de dados (se houver)...
+    echo [INFO] Verificando atualizacoes do banco...
     npx prisma migrate deploy
     echo.
 )
 
 :: Verificar se .env existe
 if not exist ".env" (
-    echo [INFO] Criando arquivo de configuracao .env a partir do exemplo...
+    echo [INFO] Criando arquivo de configuracao .env...
     copy .env.example .env >nul
-    echo [OK] .env criado. Verifique as configuracoes se necessario.
+    echo [OK] .env criado.
     echo.
 )
 
@@ -76,7 +76,8 @@ echo  Para encerrar: pressione Ctrl+C nesta janela
 echo ============================================================
 echo.
 
-:: Iniciar o servidor
 npm run dev
 
+echo.
+echo [INFO] Sistema encerrado.
 pause
