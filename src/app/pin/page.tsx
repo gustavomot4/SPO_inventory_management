@@ -43,7 +43,7 @@ function PinScreen() {
       })
 
       if (res.ok) {
-        router.replace(redirectTo)
+        window.location.href = redirectTo
       } else {
         setError('PIN incorreto. Tente novamente.')
         setDigits(Array(PIN_LENGTH).fill(''))

@@ -48,5 +48,6 @@ export const config = {
     '/configuracoes/:path*',
     '/relatorios/:path*',
     '/api/settings/:path*',
+    '/api/reports/:path*',
   ],
 }

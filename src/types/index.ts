@@ -251,3 +251,65 @@ export type SaleListItem = {
   installments: number
   createdAt: string
 }
+
+// ---------------------------------------------------------------------------
+// REPORTS -- REL-001 + REL-002
+// ---------------------------------------------------------------------------
+
+export type StockReportItem = {
+  variationId: string
+  variationSku: string
+  productId: string
+  productName: string
+  categoryName: string
+  size: string
+  color: string
+  stockQuantity: number
+  minStock: number
+  status: 'ok' | 'low' | 'out'
+}
+
+export type StockReportMeta = {
+  total: number
+  okCount: number
+  lowCount: number
+  outCount: number
+}
+
+export type SalesReportSummary = {
+  totalSales: number
+  totalRevenue: number
+  totalDiscount: number
+  averageTicketCents: number
+  cancelledCount: number
+}
+
+export type SalesByPaymentMethod = {
+  paymentMethod: string
+  paymentMethodLabel: string
+  count: number
+  totalCents: number
+}
+
+export type TopVariation = {
+  variationId: string
+  variationSku: string
+  productName: string
+  size: string
+  color: string
+  quantitySold: number
+  revenueCents: number
+}
+
+export type SalesByDay = {
+  date: string
+  count: number
+  revenueCents: number
+}
+
+export type SalesReportData = {
+  summary: SalesReportSummary
+  byPaymentMethod: SalesByPaymentMethod[]
+  topVariations: TopVariation[]
+  byDay: SalesByDay[]
+}
