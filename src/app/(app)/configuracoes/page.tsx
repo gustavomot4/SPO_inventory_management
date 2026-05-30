@@ -421,6 +421,19 @@ export default function ConfiguracoesPage() {
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [settingsError, setSettingsError] = useState<string | null>(null)
 
+  // ── Seguranca: troca de PIN ──
+  const [currentPin, setCurrentPin] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [changingPin, setChangingPin] = useState(false)
+  const [pinSaved, setPinSaved] = useState(false)
+  const [pinError, setPinError] = useState<{
+    current?: string
+    new?: string
+    confirm?: string
+    general?: string
+  } | null>(null)
+
   // ── Carregar settings ──
   useEffect(() => {
     fetch('/api/settings')
@@ -586,6 +599,54 @@ export default function ConfiguracoesPage() {
       if ('data' in json) setMachines(prev => prev.map(m => m.id === id ? json.data : m))
       return null
     } catch { return 'Erro de conexão.' }
+  }
+
+  async function handleChangePIN() {
+    setPinError(null)
+    setPinSaved(false)
+
+    const errs: NonNullable<typeof pinError> = {}
+    if (!currentPin) errs.current = 'PIN atual obrigatorio'
+    if (!newPin) errs.new = 'Novo PIN obrigatorio'
+    else if (!/^\d{4,8}$/.test(newPin)) errs.new = 'O PIN deve ter de 4 a 8 digitos numericos'
+    if (!confirmPin) errs.confirm = 'Confirmacao obrigatoria'
+    else if (newPin && confirmPin !== newPin) errs.confirm = 'Os PINs nao coincidem'
+
+    if (Object.keys(errs).length > 0) { setPinError(errs); return }
+
+    setChangingPin(true)
+    try {
+      const res = await fetch('/api/auth/pin/change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPin, newPin, confirmPin }),
+      })
+      const json = await res.json()
+
+      if (!res.ok) {
+        const code = (json as { code?: string }).code
+        if (code === 'WRONG_CURRENT_PIN') {
+          setPinError({ current: 'PIN atual incorreto' })
+        } else if (code === 'PIN_MISMATCH') {
+          setPinError({ confirm: 'Os PINs nao coincidem' })
+        } else if (code === 'INVALID_NEW_PIN') {
+          setPinError({ new: 'O PIN deve ter de 4 a 8 digitos numericos' })
+        } else {
+          setPinError({ general: (json as { error?: string }).error ?? 'Erro ao alterar PIN' })
+        }
+        return
+      }
+
+      setCurrentPin('')
+      setNewPin('')
+      setConfirmPin('')
+      setPinSaved(true)
+      setTimeout(() => setPinSaved(false), 4000)
+    } catch {
+      setPinError({ general: 'Erro de conexao. Tente novamente.' })
+    } finally {
+      setChangingPin(false)
+    }
   }
 
   async function handleToggleActive(id: string, isActive: boolean) {
@@ -856,22 +917,64 @@ export default function ConfiguracoesPage() {
         </div>
       </section>
 
-      {/* ── Segurança ── */}
+      {/* ── Seguranca ── */}
       <section>
         <p className="mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Segurança
+          Seguranca
         </p>
-        <div className="flex items-start gap-4 rounded-xl border border-dashed border-border bg-white/50 p-5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-            <Lock className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+        <div className="bg-white rounded-xl border border-border shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <Lock className="h-4 w-4 text-brand-600" />
+            <p className="text-sm font-medium text-foreground">Alterar PIN de acesso</p>
           </div>
-          <div className="min-w-0 pt-0.5">
-            <p className="text-sm font-medium text-gray-500">Alterar PIN de acesso</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Troque o PIN para proteger Relatórios e Configurações</p>
+
+          <div className="space-y-4 max-w-xs">
+            <Input
+              label="PIN atual"
+              type="password"
+              inputMode="numeric"
+              maxLength={8}
+              value={currentPin}
+              onChange={e => { setCurrentPin(e.target.value.replace(/\D/g, '')); setPinError(null) }}
+              placeholder="Digite o PIN atual"
+              error={pinError?.current}
+            />
+            <Input
+              label="Novo PIN (4 a 8 digitos)"
+              type="password"
+              inputMode="numeric"
+              maxLength={8}
+              value={newPin}
+              onChange={e => { setNewPin(e.target.value.replace(/\D/g, '')); setPinError(null) }}
+              placeholder="Digite o novo PIN"
+              error={pinError?.new}
+            />
+            <Input
+              label="Confirmar novo PIN"
+              type="password"
+              inputMode="numeric"
+              maxLength={8}
+              value={confirmPin}
+              onChange={e => { setConfirmPin(e.target.value.replace(/\D/g, '')); setPinError(null) }}
+              placeholder="Repita o novo PIN"
+              error={pinError?.confirm}
+            />
           </div>
-          <span className="ml-auto shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-400">
-            Em breve
-          </span>
+
+          {pinError?.general && (
+            <p className="mt-3 text-xs text-destructive">{pinError.general}</p>
+          )}
+          {pinSaved && (
+            <p className="mt-3 text-xs text-green-600 font-medium flex items-center gap-1">
+              <Check className="h-3.5 w-3.5" /> PIN alterado com sucesso!
+            </p>
+          )}
+
+          <div className="mt-4">
+            <Button onClick={handleChangePIN} loading={changingPin}>
+              Alterar PIN
+            </Button>
+          </div>
         </div>
       </section>
 
