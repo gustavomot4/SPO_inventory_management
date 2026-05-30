@@ -11,15 +11,7 @@ import { ArrowLeft, Printer, Loader2, AlertTriangle, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
-import type { SaleResponse, ApiResponse } from '@/types'
-
-// ---------------------------------------------------------------------------
-// Dados da loja (hardcode — Settings virá depois)
-// ---------------------------------------------------------------------------
-
-const SHOP_NAME = 'Pimenta Ousada'
-const SHOP_ADDRESS = ''
-const SHOP_PHONE = ''
+import type { SaleResponse, SettingsResponse, ApiResponse } from '@/types'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -34,7 +26,7 @@ function variationDesc(size: string, color: string, sku: string): string {
 // Componente Comanda (visível na tela + imprimível)
 // ---------------------------------------------------------------------------
 
-function Comanda({ sale }: { sale: SaleResponse }) {
+function Comanda({ sale, settings }: { sale: SaleResponse; settings: SettingsResponse | null }) {
   const saleCode = sale.id.slice(0, 8).toUpperCase()
   const dateStr = formatDateTime(new Date(sale.createdAt))
 
@@ -42,9 +34,9 @@ function Comanda({ sale }: { sale: SaleResponse }) {
     <div className="max-w-[320px] mx-auto font-mono text-[11px] leading-relaxed bg-white rounded-xl border border-border shadow-sm p-5 print-only-visible">
       {/* Cabeçalho da loja */}
       <div className="text-center mb-3">
-        <p className="font-bold text-sm uppercase tracking-wide">{SHOP_NAME}</p>
-        {SHOP_ADDRESS && <p>{SHOP_ADDRESS}</p>}
-        {SHOP_PHONE && <p>{SHOP_PHONE}</p>}
+        <p className="font-bold text-sm uppercase tracking-wide">{settings?.shopName ?? 'Pimenta Ousada'}</p>
+        {settings?.address && <p className="text-xs">{settings.address}</p>}
+        {settings?.phone && <p className="text-xs">{settings.phone}</p>}
       </div>
 
       <p className="border-t border-dashed border-gray-400 my-2" />
@@ -96,7 +88,10 @@ function Comanda({ sale }: { sale: SaleResponse }) {
       <p className="border-t border-dashed border-gray-400 my-2" />
 
       {/* Pagamento */}
-      <p className="mb-1">Pagamento: {sale.paymentMethodLabel}</p>
+      <p className="mb-1">
+        Pagamento: {sale.paymentMethodLabel}
+        {sale.installments > 1 && ` — ${sale.installments}×`}
+      </p>
       {sale.cardMachineName && <p className="text-gray-600">Maquininha: {sale.cardMachineName}</p>}
       {sale.feeCents && sale.feeCents > 0 && (
         <p className="text-gray-600">Taxa: {formatCurrency(sale.feeCents)}</p>
@@ -175,22 +170,34 @@ export default function VendaDetalhePage() {
   const saleId = params.id
 
   const [sale, setSale] = useState<SaleResponse | null>(null)
+  const [settings, setSettings] = useState<SettingsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
 
   const loadSale = useCallback(async () => {
+    // Carregar venda — falha aqui mostra "Venda não encontrada"
     try {
-      const res = await fetch(`/api/sales/${saleId}`)
-      if (res.status === 404) { setNotFound(true); return }
-      const json: ApiResponse<SaleResponse> = await res.json()
-      if ('data' in json) setSale(json.data)
+      const saleRes = await fetch(`/api/sales/${saleId}`)
+      if (saleRes.status === 404) { setNotFound(true); return }
+      if (!saleRes.ok) { setNotFound(true); return }
+      const saleJson: ApiResponse<SaleResponse> = await saleRes.json()
+      if ('data' in saleJson) setSale(saleJson.data)
+      else setNotFound(true)
     } catch {
       setNotFound(true)
     } finally {
       setLoading(false)
     }
+    // Carregar settings separadamente — falha aqui não afeta a exibição da venda
+    try {
+      const settingsRes = await fetch('/api/settings')
+      if (settingsRes.ok) {
+        const settingsJson: ApiResponse<SettingsResponse> = await settingsRes.json()
+        if ('data' in settingsJson) setSettings(settingsJson.data)
+      }
+    } catch { /* silencioso — comanda usa fallback 'Pimenta Ousada' */ }
   }, [saleId])
 
   useEffect(() => { loadSale() }, [loadSale])
@@ -355,7 +362,7 @@ export default function VendaDetalhePage() {
             Preview da Comanda
           </p>
         </div>
-        <Comanda sale={sale} />
+        <Comanda sale={sale} settings={settings} />
       </div>
     </>
   )

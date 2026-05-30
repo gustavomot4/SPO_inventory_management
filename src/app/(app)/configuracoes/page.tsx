@@ -14,14 +14,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { CreditCard, Lock, Store, Plus, Pencil, X, Check } from 'lucide-react'
+import { CreditCard, Lock, Store, Plus, Pencil, X, Check, ChevronDown, Trash2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatBasisPoints, parseBasisPoints, cn } from '@/lib/utils'
-import type { CardMachineResponse } from '@/types'
-import type { ApiResponse } from '@/types'
+import type { CardMachineResponse, CardMachineInstallmentResponse, SettingsResponse, ApiResponse, ApiSuccess } from '@/types'
 
 // ---------------------------------------------------------------------------
 // Tipos locais
@@ -57,6 +56,88 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
   const [errors, setErrors] = useState<FormErrors>({})
   const [saving, setSaving] = useState(false)
   const [toggling, setToggling] = useState(false)
+
+  // ── Parcelamentos ──
+  const [showInstallments, setShowInstallments] = useState(false)
+  const [installments, setInstallments] = useState<CardMachineInstallmentResponse[]>([])
+  const [loadingInstallments, setLoadingInstallments] = useState(false)
+  const [newInstQty, setNewInstQty] = useState('2')
+  const [newInstFee, setNewInstFee] = useState('')
+  const [addingInst, setAddingInst] = useState(false)
+  const [instError, setInstError] = useState<string | null>(null)
+  const [editingInstId, setEditingInstId] = useState<string | null>(null)
+  const [editInstFee, setEditInstFee] = useState('')
+  const [savingInst, setSavingInst] = useState(false)
+  const [deletingInstId, setDeletingInstId] = useState<string | null>(null)
+  const [confirmDeleteInstId, setConfirmDeleteInstId] = useState<string | null>(null)
+
+  async function loadInstallments() {
+    setLoadingInstallments(true)
+    try {
+      const res = await fetch(`/api/card-machines/${machine.id}/installments`)
+      const json: ApiSuccess<CardMachineInstallmentResponse[]> = await res.json()
+      if ('data' in json) setInstallments(json.data)
+    } catch { /* noop */ } finally { setLoadingInstallments(false) }
+  }
+
+  function toggleInstallments() {
+    if (!showInstallments && installments.length === 0) loadInstallments()
+    setShowInstallments(p => !p)
+  }
+
+  async function handleAddInstallment() {
+    setInstError(null)
+    const qty = parseInt(newInstQty, 10)
+    if (isNaN(qty) || qty < 2 || qty > 12) { setInstError('Parcelas: 2 a 12'); return }
+    let bps = 0
+    try { bps = parseBasisPoints(newInstFee) } catch { setInstError('Taxa inválida (ex: 2,99)'); return }
+    setAddingInst(true)
+    try {
+      const res = await fetch(`/api/card-machines/${machine.id}/installments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ installments: qty, feeBasisPoints: bps }),
+      })
+      const json: ApiResponse<CardMachineInstallmentResponse> = await res.json()
+      if (!res.ok) {
+        const code = 'code' in json ? (json as { code?: string }).code : undefined
+        setInstError(code === 'INSTALLMENT_EXISTS' ? `${qty}× já cadastrado` : 'error' in json ? json.error : 'Erro ao adicionar')
+        return
+      }
+      if ('data' in json) setInstallments(p => [...p, json.data].sort((a, b) => a.installments - b.installments))
+      setNewInstFee('')
+      setNewInstQty('2')
+    } catch { setInstError('Erro de conexão') } finally { setAddingInst(false) }
+  }
+
+  async function handleSaveInstallment(id: string) {
+    let bps = 0
+    try { bps = parseBasisPoints(editInstFee) } catch { return }
+    setSavingInst(true)
+    try {
+      const res = await fetch(`/api/card-machines/${machine.id}/installments/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feeBasisPoints: bps }),
+      })
+      const json: ApiResponse<CardMachineInstallmentResponse> = await res.json()
+      if ('data' in json) setInstallments(p => p.map(i => i.id === id ? json.data : i))
+      setEditingInstId(null)
+    } catch { /* noop */ } finally { setSavingInst(false) }
+  }
+
+  async function handleDeleteInstallment(id: string) {
+    setDeletingInstId(id)
+    try {
+      await fetch(`/api/card-machines/${machine.id}/installments/${id}`, { method: 'DELETE' })
+      setInstallments(p => p.filter(i => i.id !== id))
+      setConfirmDeleteInstId(null)
+    } catch { /* noop */ } finally { setDeletingInstId(null) }
+  }
+
+  // Opções de parcelas ainda não cadastradas (2-12)
+  const usedQtys = new Set(installments.map(i => i.installments))
+  const availableQtys = Array.from({ length: 11 }, (_, i) => i + 2).filter(n => !usedQtys.has(n))
 
   function validate(): boolean {
     const errs: FormErrors = {}
@@ -147,39 +228,116 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
   }
 
   return (
-    <div className={cn(
-      'border-b border-border last:border-0 px-6 py-4',
-      'flex items-center gap-4 hover:bg-muted/50 transition-colors',
-      !machine.isActive && 'opacity-60'
-    )}>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">{machine.name}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {formatBasisPoints(machine.feeBasisPoints)} por transação
-        </p>
+    <div className={cn('border-b border-border last:border-0', !machine.isActive && 'opacity-60')}>
+      {/* Linha principal */}
+      <div className="px-6 py-4 flex items-center gap-4 hover:bg-muted/50 transition-colors">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-foreground truncate">{machine.name}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {formatBasisPoints(machine.feeBasisPoints)} por transação
+          </p>
+        </div>
+        <Badge variant={machine.isActive ? 'success' : 'muted'}>
+          {machine.isActive ? 'Ativa' : 'Inativa'}
+        </Badge>
+        <div className="flex items-center gap-1 shrink-0">
+          <Button size="sm" variant="ghost" onClick={() => setEditing(true)} aria-label={`Editar ${machine.name}`}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button size="sm" variant={machine.isActive ? 'secondary' : 'ghost'} loading={toggling} onClick={handleToggle} className="text-xs">
+            {machine.isActive ? 'Inativar' : 'Ativar'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={toggleInstallments} className="text-xs gap-1">
+            Parcelas
+            <ChevronDown className={cn('h-3 w-3 transition-transform', showInstallments && 'rotate-180')} />
+          </Button>
+        </div>
       </div>
-      <Badge variant={machine.isActive ? 'success' : 'muted'}>
-        {machine.isActive ? 'Ativa' : 'Inativa'}
-      </Badge>
-      <div className="flex items-center gap-1 shrink-0">
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => setEditing(true)}
-          aria-label={`Editar ${machine.name}`}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          size="sm"
-          variant={machine.isActive ? 'secondary' : 'ghost'}
-          loading={toggling}
-          onClick={handleToggle}
-          className="text-xs"
-        >
-          {machine.isActive ? 'Inativar' : 'Ativar'}
-        </Button>
-      </div>
+
+      {/* Accordion de parcelamentos */}
+      {showInstallments && (
+        <div className="px-6 pb-4 bg-muted/20 border-t border-border">
+          <p className="text-xs font-medium text-muted-foreground mt-3 mb-2">Taxas de Parcelamento (Crédito)</p>
+
+          {loadingInstallments ? (
+            <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando...
+            </div>
+          ) : (
+            <div className="space-y-1.5 mb-3">
+              {/* 1× somente leitura */}
+              <div className="flex items-center gap-3 text-xs">
+                <span className="w-12 text-muted-foreground font-medium">1× à vista</span>
+                <span className="text-foreground">{formatBasisPoints(machine.feeBasisPoints)}</span>
+                <span className="text-muted-foreground text-[10px]">(taxa da maquininha)</span>
+              </div>
+              {/* Parcelamentos cadastrados */}
+              {installments.map(inst => (
+                <div key={inst.id} className="flex items-center gap-3 text-xs">
+                  <span className="w-12 text-muted-foreground font-medium">{inst.installments}×</span>
+                  {editingInstId === inst.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editInstFee}
+                        onChange={e => setEditInstFee(e.target.value)}
+                        className="w-20 rounded border border-input bg-background px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="2,99"
+                        autoFocus
+                      />
+                      <Button size="sm" loading={savingInst} onClick={() => handleSaveInstallment(inst.id)} className="h-6 px-2 text-[10px]">OK</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingInstId(null)} className="h-6 px-1">
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </>
+                  ) : confirmDeleteInstId === inst.id ? (
+                    <>
+                      <span className="text-destructive">Remover {inst.installments}×?</span>
+                      <Button size="sm" variant="destructive" loading={deletingInstId === inst.id} onClick={() => handleDeleteInstallment(inst.id)} className="h-6 px-2 text-[10px]">Sim</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setConfirmDeleteInstId(null)} className="h-6 px-1 text-[10px]">Não</Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-foreground">{formatBasisPoints(inst.feeBasisPoints)}</span>
+                      <Button size="sm" variant="ghost" onClick={() => { setEditingInstId(inst.id); setEditInstFee((inst.feeBasisPoints / 100).toFixed(2).replace('.', ',')) }} className="h-6 px-1">
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setConfirmDeleteInstId(inst.id)} className="h-6 px-1 text-muted-foreground hover:text-destructive">
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Adicionar novo parcelamento */}
+          {availableQtys.length > 0 && (
+            <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+              <span className="text-xs text-muted-foreground shrink-0">+ Adicionar:</span>
+              <select
+                value={newInstQty}
+                onChange={e => setNewInstQty(e.target.value)}
+                className="rounded border border-input bg-background px-2 py-1 text-xs focus:outline-none"
+              >
+                {availableQtys.map(n => <option key={n} value={n}>{n}×</option>)}
+              </select>
+              <input
+                type="text"
+                value={newInstFee}
+                onChange={e => setNewInstFee(e.target.value)}
+                placeholder="Taxa % (ex: 2,99)"
+                className="w-28 rounded border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <Button size="sm" loading={addingInst} onClick={handleAddInstallment} className="h-7 px-3 text-xs">
+                <Plus className="h-3 w-3" /> Add
+              </Button>
+            </div>
+          )}
+          {instError && <p className="mt-1.5 text-xs text-destructive">{instError}</p>}
+        </div>
+      )}
     </div>
   )
 }
@@ -189,11 +347,57 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
 // ---------------------------------------------------------------------------
 
 export default function ConfiguracoesPage() {
+  // ── State: Maquininhas ──
   const [machines, setMachines] = useState<CardMachineResponse[]>([])
   const [loading, setLoading] = useState(true)
-  const [addForm, setAddForm] = useState<FormState>({ name: '', fee: '' })
-  const [addErrors, setAddErrors] = useState<FormErrors>({})
+  const [addForm, setAddForm] = useState<{ name: string; fee: string }>({ name: '', fee: '' })
+  const [addErrors, setAddErrors] = useState<{ name?: string; fee?: string; general?: string }>({})
   const [adding, setAdding] = useState(false)
+
+  // ── State: Dados da Loja ──
+  const [shopName, setShopName] = useState('')
+  const [shopAddress, setShopAddress] = useState('')
+  const [shopPhone, setShopPhone] = useState('')
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
+  const [settingsError, setSettingsError] = useState<string | null>(null)
+
+  // ── Carregar settings ──
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then((j: ApiSuccess<SettingsResponse>) => {
+        if ('data' in j) {
+          setShopName(j.data.shopName)
+          setShopAddress(j.data.address ?? '')
+          setShopPhone(j.data.phone ?? '')
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  // ── Salvar dados da loja ──
+  async function handleSaveSettings() {
+    if (!shopName.trim()) { setSettingsError('Nome da loja obrigatório'); return }
+    setSavingSettings(true)
+    setSettingsError(null)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopName: shopName.trim(),
+          address: shopAddress.trim() || null,
+          phone: shopPhone.trim() || null,
+        }),
+      })
+      const json: ApiResponse<SettingsResponse> = await res.json()
+      if (!res.ok) { setSettingsError('error' in json ? json.error : 'Erro ao salvar'); return }
+      setSettingsSaved(true)
+      setTimeout(() => setSettingsSaved(false), 3000)
+    } catch { setSettingsError('Erro de conexão. Tente novamente.') }
+    finally { setSavingSettings(false) }
+  }
 
   // ── Carregar maquininhas ──
   const loadMachines = useCallback(async () => {
@@ -201,88 +405,54 @@ export default function ConfiguracoesPage() {
       const res = await fetch('/api/card-machines?includeInactive=true', { cache: 'no-store' })
       const json: ApiResponse<CardMachineResponse[]> = await res.json()
       if ('data' in json) setMachines(json.data)
-    } catch {
-      // silencioso — lista fica vazia
-    } finally {
-      setLoading(false)
-    }
+    } catch { /* silencioso */ } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { loadMachines() }, [loadMachines])
 
   // ── Adicionar maquininha ──
-  function validateAdd(): boolean {
-    const errs: FormErrors = {}
-    if (!addForm.name.trim()) errs.name = 'Nome obrigatório'
-    if (!addForm.fee.trim()) {
-      errs.fee = 'Taxa obrigatória'
-    } else {
-      try { parseBasisPoints(addForm.fee) }
-      catch { errs.fee = 'Taxa inválida (ex: 1,99)' }
-    }
-    setAddErrors(errs)
-    return Object.keys(errs).length === 0
-  }
-
   async function handleAdd() {
-    if (!validateAdd()) return
+    const errs: typeof addErrors = {}
+    if (!addForm.name.trim()) errs.name = 'Nome obrigatório'
+    if (!addForm.fee.trim()) errs.fee = 'Taxa obrigatória'
+    else { try { parseBasisPoints(addForm.fee) } catch { errs.fee = 'Taxa inválida (ex: 1,99)' } }
+    if (Object.keys(errs).length > 0) { setAddErrors(errs); return }
     setAdding(true)
     try {
       const res = await fetch('/api/card-machines', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: addForm.name.trim(),
-          feeBasisPoints: parseBasisPoints(addForm.fee),
-        }),
+        body: JSON.stringify({ name: addForm.name.trim(), feeBasisPoints: parseBasisPoints(addForm.fee) }),
       })
       const json: ApiResponse<CardMachineResponse> = await res.json()
-      if (!res.ok) {
-        const msg = 'error' in json ? json.error : 'Erro ao adicionar maquininha'
-        setAddErrors({ general: msg })
-        return
-      }
+      if (!res.ok) { setAddErrors({ general: 'error' in json ? json.error : 'Erro ao adicionar' }); return }
       if ('data' in json) setMachines(prev => [...prev, json.data])
       setAddForm({ name: '', fee: '' })
       setAddErrors({})
-    } catch {
-      setAddErrors({ general: 'Erro de conexão. Tente novamente.' })
-    } finally {
-      setAdding(false)
-    }
+    } catch { setAddErrors({ general: 'Erro de conexão.' }) }
+    finally { setAdding(false) }
   }
 
-  // ── Atualizar maquininha ──
-  async function handleUpdate(id: string, form: FormState): Promise<string | null> {
+  async function handleUpdate(id: string, form: { name: string; fee: string }): Promise<string | null> {
     try {
       const res = await fetch(`/api/card-machines/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          feeBasisPoints: parseBasisPoints(form.fee),
-        }),
+        body: JSON.stringify({ name: form.name.trim(), feeBasisPoints: parseBasisPoints(form.fee) }),
       })
       const json: ApiResponse<CardMachineResponse> = await res.json()
       if (!res.ok) return 'error' in json ? json.error : 'Erro ao salvar'
-      if ('data' in json) {
-        setMachines(prev => prev.map(m => m.id === id ? json.data : m))
-      }
+      if ('data' in json) setMachines(prev => prev.map(m => m.id === id ? json.data : m))
       return null
-    } catch {
-      return 'Erro de conexão. Tente novamente.'
-    }
+    } catch { return 'Erro de conexão.' }
   }
 
-  // ── Inativar / Ativar maquininha ──
   async function handleToggleActive(id: string, isActive: boolean) {
     try {
       if (isActive) {
-        // Inativar via DELETE
         await fetch(`/api/card-machines/${id}`, { method: 'DELETE' })
         setMachines(prev => prev.map(m => m.id === id ? { ...m, isActive: false } : m))
       } else {
-        // Reativar via PATCH
         const res = await fetch(`/api/card-machines/${id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -291,44 +461,34 @@ export default function ConfiguracoesPage() {
         const json: ApiResponse<CardMachineResponse> = await res.json()
         if ('data' in json) setMachines(prev => prev.map(m => m.id === id ? json.data : m))
       }
-    } catch {
-      // silencioso — reload resolve
-      loadMachines()
-    }
+    } catch { loadMachines() }
   }
 
-  // ── Render ──
   return (
     <div className="px-4 py-7 sm:px-6 lg:px-8 max-w-3xl mx-auto">
 
       {/* Cabeçalho */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Configurações
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Gerencie maquininhas e preferências da loja
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Configurações</h1>
+          <p className="text-sm text-muted-foreground mt-1">Gerencie maquininhas e preferências da loja</p>
         </div>
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
-          <Lock className="h-3 w-3" aria-hidden="true" strokeWidth={2} />
+          <Lock className="h-3 w-3" strokeWidth={2} />
           Área protegida
         </span>
       </div>
 
-      {/* ── Seção: Maquininhas de Cartão ── */}
+      {/* ── Maquininhas de Cartão ── */}
       <section className="mb-6">
         <p className="mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground">
           Maquininhas de Cartão
         </p>
-
         <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-
           {/* Formulário de adição */}
           <div className="px-6 py-4 border-b border-border bg-muted/30">
             <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-              <Plus className="h-4 w-4 text-brand-600" aria-hidden="true" />
+              <Plus className="h-4 w-4 text-brand-600" />
               Adicionar maquininha
             </p>
             <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
@@ -344,28 +504,24 @@ export default function ConfiguracoesPage() {
               </div>
               <div className="w-full sm:w-36">
                 <Input
-                  label="Taxa (%)"
+                  label="Taxa à vista (%)"
                   value={addForm.fee}
                   onChange={e => setAddForm(p => ({ ...p, fee: e.target.value }))}
                   error={addErrors.fee}
                   placeholder="1,99"
-                  hint="Por transação"
                   onKeyDown={e => e.key === 'Enter' && handleAdd()}
                 />
               </div>
               <div className="pb-0.5">
                 <Button onClick={handleAdd} loading={adding} size="md">
-                  <Plus className="h-3.5 w-3.5" />
-                  Adicionar
+                  <Plus className="h-3.5 w-3.5" /> Adicionar
                 </Button>
               </div>
             </div>
-            {addErrors.general && (
-              <p className="mt-2 text-xs text-destructive">{addErrors.general}</p>
-            )}
+            {addErrors.general && <p className="mt-2 text-xs text-destructive">{addErrors.general}</p>}
           </div>
 
-          {/* Lista de maquininhas */}
+          {/* Lista */}
           {loading ? (
             <div className="divide-y divide-border">
               {[1, 2].map(i => (
@@ -379,11 +535,7 @@ export default function ConfiguracoesPage() {
               ))}
             </div>
           ) : machines.length === 0 ? (
-            <EmptyState
-              icon={CreditCard}
-              title="Nenhuma maquininha cadastrada"
-              description="Adicione uma maquininha acima para começar."
-            />
+            <EmptyState icon={CreditCard} title="Nenhuma maquininha cadastrada" description="Adicione uma maquininha acima para começar." />
           ) : (
             <div>
               {machines.map(machine => (
@@ -399,41 +551,62 @@ export default function ConfiguracoesPage() {
         </div>
       </section>
 
-      {/* ── Seção: Segurança ── */}
+      {/* ── Dados da Loja ── */}
       <section className="mb-6">
+        <p className="mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+          Dados da Loja
+        </p>
+        <div className="bg-white rounded-xl border border-border shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Store className="h-4 w-4 text-brand-600" />
+            <p className="text-sm font-medium text-foreground">Informações exibidas na comanda</p>
+          </div>
+          <div className="space-y-4">
+            <Input
+              label="Nome da loja *"
+              value={shopName}
+              onChange={e => setShopName(e.target.value)}
+              placeholder="Ex: Pimenta Ousada"
+            />
+            <Input
+              label="Endereço (opcional)"
+              value={shopAddress}
+              onChange={e => setShopAddress(e.target.value)}
+              placeholder="Ex: Rua das Flores, 123 — Pinheiros, SP"
+            />
+            <Input
+              label="Telefone (opcional)"
+              value={shopPhone}
+              onChange={e => setShopPhone(e.target.value)}
+              placeholder="Ex: (11) 91234-5678"
+            />
+          </div>
+          {settingsError && <p className="mt-3 text-xs text-destructive">{settingsError}</p>}
+          {settingsSaved && (
+            <p className="mt-3 text-xs text-green-600 font-medium flex items-center gap-1">
+              <Check className="h-3.5 w-3.5" /> Dados salvos com sucesso!
+            </p>
+          )}
+          <div className="mt-4 flex justify-end">
+            <Button onClick={handleSaveSettings} loading={savingSettings}>
+              Salvar dados da loja
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Segurança ── */}
+      <section>
         <p className="mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground">
           Segurança
         </p>
         <div className="flex items-start gap-4 rounded-xl border border-dashed border-border bg-white/50 p-5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-            <Lock className="h-4 w-4 text-muted-foreground" aria-hidden="true" strokeWidth={1.5} />
+            <Lock className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
           </div>
           <div className="min-w-0 pt-0.5">
             <p className="text-sm font-medium text-gray-500">Alterar PIN de acesso</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Troque o PIN para proteger Relatórios e Configurações
-            </p>
-          </div>
-          <span className="ml-auto shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-400">
-            Em breve
-          </span>
-        </div>
-      </section>
-
-      {/* ── Seção: Dados da Loja ── */}
-      <section>
-        <p className="mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Dados da Loja
-        </p>
-        <div className="flex items-start gap-4 rounded-xl border border-dashed border-border bg-white/50 p-5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-            <Store className="h-4 w-4 text-muted-foreground" aria-hidden="true" strokeWidth={1.5} />
-          </div>
-          <div className="min-w-0 pt-0.5">
-            <p className="text-sm font-medium text-gray-500">Nome e dados da loja</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Personalize o nome da loja exibido no sistema
-            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Troque o PIN para proteger Relatórios e Configurações</p>
           </div>
           <span className="ml-auto shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-400">
             Em breve
