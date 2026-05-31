@@ -1,12 +1,15 @@
 @echo off
-chcp 65001 >nul
+setlocal enabledelayedexpansion
+
+cd /d "%~dp0"
+
 echo.
 echo ============================================================
-echo  PIMENTA OUSADA — Sistema de Gestao de Estoque
+echo  PIMENTA OUSADA - Sistema de Gestao de Estoque
 echo ============================================================
 echo.
 
-:: Verificar se Node.js está instalado
+:: Verificar se Node.js esta instalado
 where node >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERRO] Node.js nao encontrado no sistema.
@@ -19,54 +22,68 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-:: Verificar versão mínima do Node.js (v18+)
+:: Verificar versao minima do Node.js
 for /f "tokens=1 delims=v" %%i in ('node --version') do set NODE_VERSION=%%i
 for /f "tokens=1 delims=." %%i in ("%NODE_VERSION%") do set NODE_MAJOR=%%i
+
 if %NODE_MAJOR% lss 18 (
-    echo [AVISO] Node.js v%NODE_VERSION% detectado. Recomendado: v20 LTS ou superior.
+    echo [AVISO] Node.js v%NODE_VERSION% detectado. Recomendado: v20 LTS.
     echo Continuando mesmo assim...
     echo.
 )
 
-:: Instalar dependências se node_modules não existir
+:: Verificar se .env existe antes do Prisma
+if not exist ".env" (
+    echo [INFO] Criando arquivo de configuracao .env...
+    copy .env.example .env >nul
+    echo [OK] .env criado.
+    echo.
+)
+
+:: Instalar dependencias se node_modules nao existir
 if not exist "node_modules\" (
     echo [INFO] Instalando dependencias pela primeira vez...
     echo       Isso pode levar alguns minutos. Aguarde.
     echo.
-    npm install
+
+    call npm install
+
     if %errorlevel% neq 0 (
         echo [ERRO] Falha ao instalar dependencias.
-        echo Verifique sua conexao com a internet e tente novamente.
         pause
         exit /b 1
     )
+
     echo.
     echo [OK] Dependencias instaladas.
     echo.
 )
 
-:: Criar/aplicar migrations do banco de dados
-if not exist "dev.db" (
+:: Aplicar migrations do banco de dados
+if not exist "prisma\dev.db" (
     echo [INFO] Criando banco de dados pela primeira vez...
-    npx prisma migrate deploy
+
+    call npx prisma migrate deploy
+
     if %errorlevel% neq 0 (
         echo [ERRO] Falha ao criar o banco de dados.
         pause
         exit /b 1
     )
+
     echo [OK] Banco de dados criado.
     echo.
 ) else (
-    echo [INFO] Aplicando atualizacoes do banco de dados (se houver)...
-    npx prisma migrate deploy
-    echo.
-)
+    echo [INFO] Verificando atualizacoes do banco...
 
-:: Verificar se .env existe
-if not exist ".env" (
-    echo [INFO] Criando arquivo de configuracao .env a partir do exemplo...
-    copy .env.example .env >nul
-    echo [OK] .env criado. Verifique as configuracoes se necessario.
+    call npx prisma migrate deploy
+
+    if %errorlevel% neq 0 (
+        echo [ERRO] Falha ao atualizar o banco de dados.
+        pause
+        exit /b 1
+    )
+
     echo.
 )
 
@@ -76,7 +93,10 @@ echo  Para encerrar: pressione Ctrl+C nesta janela
 echo ============================================================
 echo.
 
-:: Iniciar o servidor
-npm run dev
+start "" http://localhost:3000
 
+call npm run dev
+
+echo.
+echo [INFO] Sistema encerrado.
 pause
