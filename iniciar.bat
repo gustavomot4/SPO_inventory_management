@@ -9,94 +9,103 @@ echo  PIMENTA OUSADA - Sistema de Gestao de Estoque
 echo ============================================================
 echo.
 
-:: Verificar se Node.js esta instalado
-where node >nul 2>nul
+:: -------------------------------------------------------
+:: 1. Verificar se Docker esta instalado
+:: -------------------------------------------------------
+where docker >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ERRO] Node.js nao encontrado no sistema.
+    echo [ERRO] Docker nao encontrado no sistema.
     echo.
-    echo Por favor, instale o Node.js 20 LTS em:
-    echo   https://nodejs.org/pt/download
+    echo Por favor, instale o Docker Desktop em:
+    echo   https://www.docker.com/products/docker-desktop/
     echo.
-    echo Apos instalar, feche e reabra este arquivo.
+    echo Apos instalar e reiniciar o computador, abra este arquivo novamente.
     pause
     exit /b 1
 )
 
-:: Verificar versao minima do Node.js
-for /f "tokens=1 delims=v" %%i in ('node --version') do set NODE_VERSION=%%i
-for /f "tokens=1 delims=." %%i in ("%NODE_VERSION%") do set NODE_MAJOR=%%i
-
-if %NODE_MAJOR% lss 18 (
-    echo [AVISO] Node.js v%NODE_VERSION% detectado. Recomendado: v20 LTS.
-    echo Continuando mesmo assim...
-    echo.
-)
-
-:: Verificar se .env existe antes do Prisma
-if not exist ".env" (
-    echo [INFO] Criando arquivo de configuracao .env...
-    copy .env.example .env >nul
-    echo [OK] .env criado.
-    echo.
-)
-
-:: Instalar dependencias se node_modules nao existir
-if not exist "node_modules\" (
-    echo [INFO] Instalando dependencias pela primeira vez...
-    echo       Isso pode levar alguns minutos. Aguarde.
+:: -------------------------------------------------------
+:: 2. Verificar se o Docker daemon esta rodando
+:: -------------------------------------------------------
+docker info >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [INFO] Docker nao esta em execucao. Iniciando Docker Desktop...
+    echo       Aguarde - isso pode levar ate 1 minuto.
     echo.
 
-    call npm install
-
+    start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe" 2>nul
     if %errorlevel% neq 0 (
-        echo [ERRO] Falha ao instalar dependencias.
-        pause
-        exit /b 1
+        start "" "%LOCALAPPDATA%\Docker\Docker Desktop.exe" 2>nul
     )
 
-    echo.
-    echo [OK] Dependencias instaladas.
-    echo.
+    set DOCKER_WAIT=0
+    :waitdocker
+    timeout /t 5 /nobreak >nul
+    docker info >nul 2>nul
+    if %errorlevel% equ 0 goto dockerready
+    set /a DOCKER_WAIT+=5
+    if %DOCKER_WAIT% lss 90 (
+        echo   Aguardando Docker... (%DOCKER_WAIT%s)
+        goto waitdocker
+    )
+    echo [ERRO] Docker nao inicializou em 90 segundos.
+    echo        Abra o Docker Desktop manualmente e tente novamente.
+    pause
+    exit /b 1
 )
 
-:: Aplicar migrations do banco de dados
-if not exist "prisma\dev.db" (
-    echo [INFO] Criando banco de dados pela primeira vez...
+:dockerready
+echo [OK] Docker esta em execucao.
+echo.
 
-    call npx prisma migrate deploy
-
-    if %errorlevel% neq 0 (
-        echo [ERRO] Falha ao criar o banco de dados.
-        pause
-        exit /b 1
-    )
-
-    echo [OK] Banco de dados criado.
-    echo.
+:: -------------------------------------------------------
+:: 3. Detectar primeira execucao ou reinicio normal
+::    Primeira vez = imagem "spo-pimenta-ousada" nao existe ainda
+:: -------------------------------------------------------
+docker image inspect spo-pimenta-ousada >nul 2>nul
+if %errorlevel% neq 0 (
+    set FIRST_RUN=1
 ) else (
-    echo [INFO] Verificando atualizacoes do banco...
-
-    call npx prisma migrate deploy
-
-    if %errorlevel% neq 0 (
-        echo [ERRO] Falha ao atualizar o banco de dados.
-        pause
-        exit /b 1
-    )
-
-    echo.
+    set FIRST_RUN=0
 )
 
-echo ============================================================
-echo  Sistema pronto! Abrindo em http://localhost:3000
-echo  Para encerrar: pressione Ctrl+C nesta janela
-echo ============================================================
+:: -------------------------------------------------------
+:: 4. Abrir tela de carregamento ANTES do docker compose
+::    (a pagina faz polling e redireciona quando pronto)
+:: -------------------------------------------------------
+if %FIRST_RUN% equ 1 (
+    echo [INFO] Primeira execucao detectada. Abrindo tela de progresso...
+    start "" "%~dp0loading_primeira_vez.html"
+) else (
+    echo [INFO] Reiniciando o sistema. Abrindo tela de carregamento...
+    start "" "%~dp0loading.html"
+)
+
+:: -------------------------------------------------------
+:: 5. Iniciar containers em modo detached
+:: -------------------------------------------------------
+if %FIRST_RUN% equ 1 (
+    echo [INFO] Construindo e iniciando o sistema pela primeira vez...
+    echo       Isso pode levar varios minutos. A tela no browser mostra o progresso.
+) else (
+    echo [INFO] Iniciando o sistema...
+)
 echo.
 
-start "" http://localhost:3000
+call docker compose up -d --build
 
-call npm run dev
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERRO] Falha ao iniciar o sistema.
+    echo       Veja as mensagens acima para identificar o problema.
+    pause
+    exit /b 1
+)
 
 echo.
-echo [INFO] Sistema encerrado.
+echo [OK] Containers iniciados. Aguardando aplicacao ficar pronta...
+echo      O browser abrira automaticamente quando estiver pronto.
+echo.
+echo      Para encerrar o sistema: execute parar.bat
+echo.
 pause

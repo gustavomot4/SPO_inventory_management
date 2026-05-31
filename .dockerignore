@@ -1,0 +1,35 @@
+# Dependencias — reinstaladas no build
+node_modules
+
+# Build anterior
+.next
+
+# Banco de dados local — persistido via volume Docker
+prisma/dev.db
+prisma/dev.db-journal
+
+# Backups locais
+backups/
+
+# Variaveis de ambiente locais — injetadas via docker-compose
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

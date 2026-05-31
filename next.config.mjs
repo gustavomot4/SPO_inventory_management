@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Configuracoes minimas para o MVP
-  // Arquivos estaticos e assets sao servidos pelo Next.js por padrao
+  // output: standalone gera bundle minimo para rodar em producao sem node_modules completo
+  // Necessario para o build Docker multi-stage funcionar corretamente
+  output: 'standalone',
 }
 
 export default nextConfig

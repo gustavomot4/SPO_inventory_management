@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pimenta Ousada — Iniciando</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:     #0f0b09;
+    --red:    #c0392b;
+    --amber:  #e67e22;
+    --gold:   #f0a500;
+    --cream:  #f5ede0;
+    --muted:  #8a6a55;
+    --done:   #2ecc71;
+    --size:   160px;
+    --stroke: 6px;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--cream);
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.04;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* ── Radial glow ─────────────────────────────────────────── */
+  .glow {
+    position: fixed;
+    width: 500px; height: 500px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(192,57,43,0.14) 0%, transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    animation: pulse 4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.5; transform: translate(-50%,-50%) scale(0.9); }
+    50%       { opacity: 1;   transform: translate(-50%,-50%) scale(1.1); }
+  }
+
+  /* ── Shell ───────────────────────────────────────────────── */
+  .shell {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Ring progress ───────────────────────────────────────── */
+  .ring-wrap {
+    position: relative;
+    width: var(--size);
+    height: var(--size);
+    animation: fadeIn 0.6s ease both;
+  }
+
+  .ring-bg, .ring-progress {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+  }
+
+  /* SVG ring */
+  .ring-svg {
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+  }
+  .ring-track {
+    fill: none;
+    stroke: rgba(255,255,255,0.06);
+    stroke-width: var(--stroke);
+  }
+  .ring-arc {
+    fill: none;
+    stroke: url(#grad);
+    stroke-width: var(--stroke);
+    stroke-linecap: round;
+    stroke-dasharray: 440;
+    stroke-dashoffset: 440;
+    transition: stroke-dashoffset 0.6s ease;
+  }
+
+  /* Pepper inside ring */
+  .ring-center {
+    position: absolute; inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+  }
+  .ring-emoji {
+    font-size: 2.4rem;
+    animation: rock 2.5s ease-in-out infinite;
+    filter: drop-shadow(0 0 16px rgba(192,57,43,0.7));
+  }
+  @keyframes rock {
+    0%, 100% { transform: rotate(-6deg) scale(1); }
+    50%       { transform: rotate(6deg) scale(1.05); }
+  }
+  .ring-pct {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-weight: 300;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Brand ───────────────────────────────────────────────── */
+  .brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    animation: fadeIn 0.6s 0.15s ease both;
+  }
+  .brand-name {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.9rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--amber) 50%, var(--red) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .brand-status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 300;
+    letter-spacing: 0.06em;
+    min-height: 1.2em;
+    transition: opacity 0.4s;
+  }
+
+  /* ── Dots ────────────────────────────────────────────────── */
+  .dots {
+    display: flex;
+    gap: 0.5rem;
+    animation: fadeIn 0.6s 0.3s ease both;
+  }
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    opacity: 0.25;
+    animation: dotPulse 1.4s ease-in-out infinite;
+  }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 0.25; transform: scale(1); }
+    50%       { opacity: 1;    transform: scale(1.3); }
+  }
+
+  /* ── Ready flash ─────────────────────────────────────────── */
+  .flash {
+    position: fixed; inset: 0;
+    background: var(--done);
+    opacity: 0;
+    z-index: 200;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .flash.go { opacity: 0.15; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="glow"></div>
+<div class="flash" id="flash"></div>
+
+<div class="shell">
+
+  <div class="ring-wrap">
+    <svg class="ring-svg" viewBox="0 0 160 160">
+      <defs>
+        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stop-color="#c0392b"/>
+          <stop offset="50%"  stop-color="#e67e22"/>
+          <stop offset="100%" stop-color="#f0a500"/>
+        </linearGradient>
+      </defs>
+      <circle class="ring-track" cx="80" cy="80" r="70"/>
+      <circle class="ring-arc"   cx="80" cy="80" r="70" id="arc"/>
+    </svg>
+    <div class="ring-center">
+      <div class="ring-emoji">🌶️</div>
+      <div class="ring-pct" id="pctLabel">0%</div>
+    </div>
+  </div>
+
+  <div class="brand">
+    <div class="brand-name">Pimenta Ousada</div>
+    <div class="brand-status" id="statusText">Iniciando o sistema...</div>
+  </div>
+
+  <div class="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+
+</div>
+
+<script>
+  const arc        = document.getElementById('arc');
+  const pctLabel   = document.getElementById('pctLabel');
+  const statusText = document.getElementById('statusText');
+  const flash      = document.getElementById('flash');
+
+  const CIRCUMF  = 2 * Math.PI * 70; // ≈ 440
+  const DURATION = 18000; // 18s baseline — polling overrides
+  let start = Date.now();
+  let done  = false;
+
+  const messages = [
+    { at:  0, text: 'Iniciando o sistema...' },
+    { at: 25, text: 'Subindo os containers...' },
+    { at: 55, text: 'Carregando o banco de dados...' },
+    { at: 80, text: 'Quase pronto...' },
+    { at: 95, text: 'Só um momento...' },
+  ];
+
+  function setProgress(pct) {
+    const offset = CIRCUMF * (1 - pct / 100);
+    arc.style.strokeDashoffset = offset;
+    pctLabel.textContent = Math.round(pct) + '%';
+
+    // Update status message
+    const msg = [...messages].reverse().find(m => pct >= m.at);
+    if (msg) statusText.textContent = msg.text;
+  }
+
+  function tick() {
+    if (done) return;
+    const elapsed = Date.now() - start;
+    const t = Math.min(elapsed / DURATION, 0.97); // never reach 100% without confirmation
+    // ease-out curve so it slows near end
+    const eased = 1 - Math.pow(1 - t, 2.5);
+    setProgress(eased * 97);
+  }
+
+  const tickInterval = setInterval(tick, 100);
+
+  // ── Poll ──────────────────────────────────────────────────
+  async function checkReady() {
+    if (done) return;
+    try {
+      await fetch('http://localhost:3000', { method: 'HEAD', mode: 'no-cors', cache: 'no-store' });
+      markDone();
+    } catch(e) {}
+  }
+
+  function markDone() {
+    if (done) return;
+    done = true;
+    clearInterval(tickInterval);
+
+    setProgress(100);
+    statusText.textContent = 'Pronto! Abrindo...';
+
+    // Green flash feedback
+    flash.classList.add('go');
+    setTimeout(() => {
+      flash.classList.remove('go');
+      window.location.href = 'http://localhost:3000';
+    }, 700);
+  }
+
+  // Poll every 2s — quick loading means fast check
+  const pollInterval = setInterval(checkReady, 2000);
+  checkReady(); // immediate first check
+</script>
+</body>
+</html>
