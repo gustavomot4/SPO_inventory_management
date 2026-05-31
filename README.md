@@ -1,170 +1,150 @@
 # 🌶️ SPO — Sistema Pimenta Ousada
 
-Sistema de gestão de estoque para a loja **Pimenta Ousada**, desenvolvido com Next.js 14, TypeScript, Prisma e SQLite.
+Sistema de gestão de estoque para a loja **Pimenta Ousada**, desenvolvido com Next.js 14, TypeScript, Prisma ORM e SQLite. Roda localmente via Docker Desktop — sem necessidade de instalar Node.js na máquina.
 
 ---
 
-## Requisitos
+## Início Rápido
 
-- **Node.js 20 LTS** ou superior — [nodejs.org](https://nodejs.org/pt/download)
-- **npm** (vem junto com o Node.js)
-- Windows 11 ou Linux
+### Pré-requisito único: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
----
-
-## Iniciando o sistema
-
-### Windows
-
-Dê duplo clique em `iniciar.bat` ou execute no terminal:
-
-```bat
+```bash
+# Windows — duplo clique ou:
 iniciar.bat
+
+# Linux / Mac
+chmod +x iniciar.sh && ./iniciar.sh
 ```
 
-### Linux / Mac
+O sistema abre automaticamente em **http://localhost:3000**.
 
-```bash
-chmod +x iniciar.sh
-./iniciar.sh
-```
+Para encerrar: execute `parar.bat` (Windows) ou `docker compose down`.
 
-O sistema ficará disponível em: **http://localhost:3000**
+> **Guia completo para a usuária final:** `guia_dona_da_loja.docx`
+> **Guia técnico de deployment:** `DEPLOYMENT.md`
 
 ---
 
-## Iniciando manualmente (desenvolvedores)
+## Funcionalidades
 
-```bash
-# 1. Instalar dependências
-npm install
-
-# 2. Criar o banco de dados (primeira execução)
-npx prisma migrate deploy
-
-# 3. Iniciar o servidor de desenvolvimento
-npm run dev
-```
-
----
-
-## Scripts disponíveis
-
-| Comando | Descrição |
-|---|---|
-| `npm run dev` | Inicia o servidor de desenvolvimento |
-| `npm run build` | Gera o build de produção |
-| `npm start` | Inicia o servidor em modo produção (requer build) |
-| `npm run typecheck` | Verifica tipos TypeScript sem compilar |
-| `npm run lint` | Executa o linter ESLint |
-| `npm run db:migrate` | Cria e aplica nova migration (desenvolvimento) |
-| `npm run db:migrate:deploy` | Aplica migrations existentes (produção/CI) |
-| `npm run db:studio` | Abre o Prisma Studio (UI visual do banco) |
-| `npm run db:generate` | Regenera o Prisma Client após mudanças no schema |
-
----
-
-## Estrutura do projeto
-
-```
-SPO_inventory_management/
-├── db/                    # Documentação do banco de dados (Database Agent)
-│   ├── schema.prisma      # Schema de referência
-│   └── SCHEMA_DESIGN.md   # Decisões de design do banco
-├── prisma/
-│   ├── schema.prisma      # Schema usado pelo Prisma CLI
-│   └── migrations/        # Histórico de migrations (gerado automaticamente)
-├── src/
-│   ├── app/               # Next.js App Router (páginas e layouts)
-│   │   ├── layout.tsx     # Layout raiz da aplicação
-│   │   ├── page.tsx       # Página inicial
-│   │   └── globals.css    # Estilos globais + Tailwind
-│   ├── lib/
-│   │   ├── prisma.ts      # Singleton do PrismaClient
-│   │   └── utils.ts       # Funções utilitárias (formatação de moeda, datas)
-│   └── types/
-│       └── index.ts       # Tipos TypeScript compartilhados
-├── .env                   # Variáveis de ambiente locais (não commitado)
-├── .env.example           # Modelo das variáveis de ambiente (commitado)
-├── iniciar.bat            # Script de inicialização para Windows
-├── iniciar.sh             # Script de inicialização para Linux/Mac
-└── dev.db                 # Banco de dados SQLite (não commitado)
-```
-
----
-
-## Banco de dados
-
-### Localização do arquivo
-
-- **Desenvolvimento:** `dev.db` na raiz do projeto (criado automaticamente)
-- **Produção:** configurar `DATABASE_URL` no `.env` para um caminho **fora** da pasta do projeto, ex: `file:C:/SPO/dados/spo.db`
-
-> ⚠️ O arquivo `dev.db` não deve ser commitado no Git (já no `.gitignore`).
-> Nunca sobrescreva o banco de produção com `git pull`.
-
-### Backup manual
-
-Copie o arquivo `.db` para um local seguro:
-
-```bat
-:: Windows — copiar para área de trabalho
-copy dev.db "%USERPROFILE%\Desktop\spo_backup_%date:~-4,4%%date:~-7,2%%date:~0,2%.db"
-```
-
-```bash
-# Linux
-cp dev.db ~/backups/spo_backup_$(date +%Y%m%d_%H%M%S).db
-```
-
-### Visualizando o banco
-
-```bash
-npx prisma studio
-```
-
-Abre uma interface web em `http://localhost:5555` para visualizar e editar registros diretamente.
-
----
-
-## Variáveis de ambiente
-
-Copie `.env.example` para `.env` e ajuste se necessário:
-
-```bash
-cp .env.example .env
-```
-
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `DATABASE_URL` | `file:./dev.db` | Caminho para o arquivo SQLite |
-| `NEXTAUTH_SECRET` | *(ver .env.example)* | Segredo para tokens de sessão |
-| `NEXTAUTH_URL` | `http://localhost:3000` | URL base da aplicação |
-| `NODE_ENV` | `development` | Ambiente de execução |
-
----
-
-## Convenções de desenvolvimento
-
-- **Preços:** sempre em centavos (Int). `R$ 59,90` = `5990`. Use `formatCurrency()` de `src/lib/utils.ts` para exibição.
-- **IDs:** cuid (string opaco gerado pelo Prisma). Nunca usar inteiros sequenciais como ID público.
-- **Tipos:** `any` é proibido. Usar tipos do Prisma via `import type { User } from '@prisma/client'`.
-- **Banco de dados:** todas as chamadas ao Prisma vão em `src/repositories/`. Nunca chamar `prisma` diretamente em páginas ou actions.
-- **Estilização:** Tailwind CSS, mobile-first. Viewport mínimo suportado: 375px (iPhone SE).
+- **Cadastro de produtos** com variações (tamanho, cor), SKU automático e preço de custo
+- **Controle de estoque** com alertas de nível mínimo e histórico de entradas
+- **PDV (ponto de venda)** com desconto, parcelamento e múltiplas maquininhas de cartão
+- **Comanda térmica 80mm** via `window.print()` com dados da loja configuráveis
+- **Relatórios** de estoque e vendas com gráficos, lucro estimado e margem
+- **Autenticação por PIN** com bcrypt — sem cadastro de usuários
+- **Responsivo** — funciona em celular (375px+) e desktop
 
 ---
 
 ## Tecnologias
 
-| Tecnologia | Versão | Papel |
-|---|---|---|
-| Next.js | 14+ | Framework full-stack (App Router) |
-| TypeScript | 5.x | Linguagem (strict mode) |
-| Tailwind CSS | 3.x | Estilização mobile-first |
-| Prisma | 5.x | ORM e migrations |
-| SQLite | — | Banco de dados local (MVP) |
-| Node.js | 20 LTS | Runtime |
+| Camada | Tecnologia |
+|---|---|
+| Framework | Next.js 14 (App Router) |
+| Linguagem | TypeScript (strict) |
+| ORM | Prisma 5.x |
+| Banco de dados | SQLite (MVP) → PostgreSQL (produção futura) |
+| Estilização | Tailwind CSS (mobile-first) |
+| Autenticação | iron-session + PIN bcrypt |
+| Runtime | Node.js 20-alpine (Docker) |
+| Infra | Docker Desktop, docker compose |
 
 ---
 
-*SPO — Sistema Pimenta Ousada | MVP v0.1.0 | 2026*
+## Desenvolvimento Local
+
+```bash
+# Instalar dependências
+npm install
+
+# Configurar ambiente
+cp .env.example .env
+
+# Aplicar migrations e gerar Prisma Client
+npx prisma migrate deploy
+npx prisma generate
+
+# Iniciar em modo dev (hot reload)
+npm run dev
+```
+
+Acesse: `http://localhost:3000`
+
+### Scripts disponíveis
+
+| Comando | Descrição |
+|---|---|
+| `npm run dev` | Servidor de desenvolvimento com hot reload |
+| `npm run build` | Build de produção (testa o mesmo processo do Docker) |
+| `npm start` | Inicia em modo produção (requer build) |
+| `npm run typecheck` | Verifica tipos TypeScript |
+| `npm run lint` | Executa ESLint |
+| `npm run db:migrate` | Cria e aplica nova migration |
+| `npm run db:migrate:deploy` | Aplica migrations existentes |
+| `npm run db:studio` | Abre Prisma Studio em localhost:5555 |
+| `npm run db:generate` | Regenera Prisma Client |
+
+---
+
+## Estrutura do Projeto
+
+```
+SPO_inventory_management/
+├── Dockerfile                  # Build multi-stage (deps → builder → runner)
+├── docker-compose.yml          # Serviço, porta 3000, volume do banco
+├── docker-entrypoint.sh        # migrate deploy + node server.js
+├── iniciar.bat / iniciar.sh    # Launchers (detectam Docker, abrem browser)
+├── parar.bat                   # Encerra containers
+├── loading.html                # Tela de carregamento — reinício rápido
+├── loading_primeira_vez.html   # Tela de carregamento — primeiro build
+├── guia_dona_da_loja.docx      # Guia de uso para a usuária final
+├── DEPLOYMENT.md               # Guia técnico de implantação
+├── prisma/
+│   ├── schema.prisma           # Schema v2.4 (SQLite, binaryTargets Alpine)
+│   └── migrations/             # Histórico de migrations SQL
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── (app)/              # Rotas protegidas (autenticação PIN)
+│   │   │   ├── estoque/        # Estoque atual + entradas
+│   │   │   ├── produtos/       # Cadastro de produtos e variações
+│   │   │   ├── vendas/         # PDV + histórico + detalhe
+│   │   │   ├── relatorios/     # Estoque e vendas com gráficos
+│   │   │   └── configuracoes/  # Maquininhas, categorias, PIN, comanda
+│   │   ├── api/                # API Routes (REST)
+│   │   └── pin/                # Tela de autenticação PIN
+│   └── lib/
+│       ├── prisma.ts           # Singleton PrismaClient
+│       ├── session.ts          # iron-session (SESSION_SECRET)
+│       └── utils.ts            # formatCurrency, helpers
+└── db/
+    ├── schema.prisma           # Schema de referência (documentação)
+    └── SCHEMA_DESIGN.md        # Decisões de design do banco
+```
+
+---
+
+## Banco de Dados
+
+- **Docker (produção):** `/data/spo.db` dentro do container, persistido no volume `spo-pimenta-ousada-data`
+- **Desenvolvimento local:** `prisma/dev.db` (criado automaticamente, não commitado)
+- **Backup:** execute `backup.bat` (Windows) para copiar o banco para a pasta `backups/`
+
+Para visualizar o banco em modo dev:
+```bash
+npx prisma studio   # abre em http://localhost:5555
+```
+
+---
+
+## Convenções
+
+- **Preços:** sempre em centavos (`Int`). `R$ 59,90` = `5990`. Use `formatCurrency()` de `src/lib/utils.ts`.
+- **Taxas:** em basis points (`Int`). `1,99%` = `199`.
+- **IDs:** `cuid()` — string opaca, nunca inteiro sequencial como ID público.
+- **Timestamps:** `String` com ISO 8601 via `dbgenerated(strftime(...))` — compatível com Prisma 5 + SQLite.
+- **Enums:** `String` na camada de banco — validação feita na API. Ver `src/lib/enums.ts`.
+
+---
+
+*SPO — Sistema Pimenta Ousada | v1.0.0 | Produção local via Docker | 2026*

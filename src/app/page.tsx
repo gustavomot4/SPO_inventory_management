@@ -3,8 +3,8 @@
 // SPO — Sistema Pimenta Ousada | EST-005
 // =============================================================================
 //
-// Serve a rota raiz "/". Inclui layout com sidebar manualmente pois este
-// arquivo está em app/ (fora do grupo (app)/) e usa apenas app/layout.tsx.
+// Serve a rota raiz "/". Está em app/ (fora do grupo (app)/) portanto usa
+// AppShell diretamente para ter hamburger mobile + sidebar desktop.
 // Exibe widget de alertas de estoque quando há itens OUT ou LOW.
 // =============================================================================
 
@@ -18,7 +18,7 @@ import {
   XCircle,
   Loader2,
 } from 'lucide-react'
-import { SidebarContent } from '@/components/layout/SidebarContent'
+import { AppShell } from '@/components/layout/AppShell'
 import type { StockAlertItem, ApiSuccess } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -140,25 +140,17 @@ function AlertWidget() {
 
 export default function DashboardPage() {
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      {/* Sidebar — visível apenas em telas md+ */}
-      <aside className="hidden md:flex md:w-56 md:flex-col md:shrink-0 bg-white border-r border-border">
-        <SidebarContent />
-      </aside>
+    <AppShell>
+      <div className="px-4 py-7 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground mb-1">
+          Painel
+        </h1>
+        <p className="text-sm text-muted-foreground mb-8">
+          Visão geral do sistema
+        </p>
 
-      {/* Área principal */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="px-4 py-7 sm:px-6 lg:px-8 max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground mb-1">
-            Painel
-          </h1>
-          <p className="text-sm text-muted-foreground mb-8">
-            Visão geral do sistema
-          </p>
-
-          <AlertWidget />
-        </div>
-      </main>
-    </div>
+        <AlertWidget />
+      </div>
+    </AppShell>
   )
 }
