@@ -1,0 +1,31 @@
+services:
+  spo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spo-pimenta-ousada
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Banco de dados persistido fora do container
+      # Os dados sobrevivem a restarts e atualizacoes do container
+      - spo_data:/data
+    environment:
+      # Banco em /data (volume persistente)
+      DATABASE_URL: "file:/data/spo.db"
+      # Gerar com: openssl rand -base64 32
+      # Ou deixar como esta para MVP local (trocar antes de expor na internet)
+      SESSION_SECRET: "spo-pimenta-ousada-local-secret-trocar-em-producao"
+      NODE_ENV: "production"
+      PORT: "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health 2>/dev/null || wget -qO- http://localhost:3000 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  spo_data:
+    name: spo-pimenta-ousada-data
