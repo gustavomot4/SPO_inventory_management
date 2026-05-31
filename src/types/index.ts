@@ -292,6 +292,10 @@ export type SalesReportSummary = {
   estimatedCostCents: number | null
   estimatedProfitCents: number | null
   estimatedMarginPct: number | null
+  // Taxas de maquininha
+  totalFeeCents: number
+  netRevenueCents: number         // receita - taxas
+  feePercentage: number | null    // % medio de taxa sobre receita (null se sem taxa)
 }
 
 export type SalesByPaymentMethod = {

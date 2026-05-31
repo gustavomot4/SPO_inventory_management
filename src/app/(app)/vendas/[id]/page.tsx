@@ -87,15 +87,11 @@ function Comanda({ sale, settings }: { sale: SaleResponse; settings: SettingsRes
 
       <p className="border-t border-dashed border-gray-400 my-2" />
 
-      {/* Pagamento */}
+      {/* Pagamento — maquininha e taxa omitidos intencionalmente (dado interno) */}
       <p className="mb-1">
         Pagamento: {sale.paymentMethodLabel}
         {sale.installments > 1 && ` — ${sale.installments}×`}
       </p>
-      {sale.cardMachineName && <p className="text-gray-600">Maquininha: {sale.cardMachineName}</p>}
-      {sale.feeCents && sale.feeCents > 0 && (
-        <p className="text-gray-600">Taxa: {formatCurrency(sale.feeCents)}</p>
-      )}
 
       <p className="border-t border-dashed border-gray-400 my-3" />
 
