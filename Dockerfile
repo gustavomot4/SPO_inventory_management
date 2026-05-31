@@ -67,8 +67,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_module
 RUN mkdir -p /data && chown nextjs:nodejs /data
 
 # Entrypoint: roda migrate deploy e depois inicia o servidor
+# sed remove \r (CRLF) caso o arquivo tenha sido salvo no Windows
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
+RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 
 USER nextjs
 
