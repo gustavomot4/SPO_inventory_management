@@ -78,8 +78,11 @@ echo.
 
 :: -------------------------------------------------------
 :: 3. Detectar primeira execucao
+::    Checa o volume do banco — criado apenas na 1a execucao.
+::    Nao usa o nome da imagem pois o docker compose gera
+::    "spo_inventory_management-spo", nao "spo-pimenta-ousada".
 :: -------------------------------------------------------
-%DOCKER_CMD% image inspect spo-pimenta-ousada >nul 2>nul
+%DOCKER_CMD% volume inspect spo-pimenta-ousada-data >nul 2>nul
 if %errorlevel% neq 0 (
     set FIRST_RUN=1
 ) else (
