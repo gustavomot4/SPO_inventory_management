@@ -24,6 +24,9 @@ RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Garantir que public/ existe mesmo que .gitkeep esteja no .dockerignore
+RUN mkdir -p public
+
 # Gerar Prisma Client (binaryTargets inclui linux-musl-openssl-3.0.x — ver schema.prisma)
 RUN npx prisma generate
 
