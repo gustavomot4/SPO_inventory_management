@@ -59,7 +59,7 @@ call :startDesktop
 
 set DOCKER_WAIT=0
 :waitdocker
-timeout /t 5 /nobreak >nul
+ping -n 6 127.0.0.1 >nul 2>nul
 %DOCKER_CMD% info >nul 2>nul
 if %errorlevel% equ 0 goto dockerready
 set /a DOCKER_WAIT+=5
