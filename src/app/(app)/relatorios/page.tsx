@@ -14,7 +14,6 @@ import {
   TrendingUp,
   TrendingDown,
   ShoppingBag,
-  Tag,
   ReceiptText,
   BarChart2,
   Banknote,
@@ -74,10 +73,6 @@ function getDateRange(period: PeriodFilter): { dateFrom: string; dateTo: string 
     }
   }
   return { dateFrom: '', dateTo: '' }
-}
-
-function formatDateBR(dateStr: string): string {
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('pt-BR')
 }
 
 // ---------------------------------------------------------------------------

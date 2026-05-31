@@ -1,0 +1,9 @@
+# Forcar LF em todos os arquivos de texto (evita CRLF quebrando scripts no Linux/Docker)
+* text=auto eol=lf
+
+# Shell scripts: sempre LF, nunca CRLF
+*.sh text eol=lf
+
+# Arquivos Windows que precisam de CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
