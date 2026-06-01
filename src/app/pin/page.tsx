@@ -18,7 +18,11 @@ const PIN_LENGTH = 4
 
 function PinScreen() {
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') ?? '/produtos'
+  // QA-016: sanitizar redirect — aceitar apenas caminhos relativos internos
+  const rawRedirect = searchParams.get('redirect') ?? '/produtos'
+  const redirectTo = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+    ? rawRedirect
+    : '/produtos'
 
   const [digits, setDigits] = useState<string[]>(Array(PIN_LENGTH).fill(''))
   const [error, setError] = useState<string | null>(null)

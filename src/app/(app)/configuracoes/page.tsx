@@ -608,7 +608,7 @@ export default function ConfiguracoesPage() {
     const errs: NonNullable<typeof pinError> = {}
     if (!currentPin) errs.current = 'PIN atual obrigatorio'
     if (!newPin) errs.new = 'Novo PIN obrigatorio'
-    else if (!/^\d{4,8}$/.test(newPin)) errs.new = 'O PIN deve ter de 4 a 8 digitos numericos'
+    else if (!/^\d{4}$/.test(newPin)) errs.new = 'O PIN deve ter exatamente 4 digitos numericos'
     if (!confirmPin) errs.confirm = 'Confirmacao obrigatoria'
     else if (newPin && confirmPin !== newPin) errs.confirm = 'Os PINs nao coincidem'
 
@@ -630,7 +630,7 @@ export default function ConfiguracoesPage() {
         } else if (code === 'PIN_MISMATCH') {
           setPinError({ confirm: 'Os PINs nao coincidem' })
         } else if (code === 'INVALID_NEW_PIN') {
-          setPinError({ new: 'O PIN deve ter de 4 a 8 digitos numericos' })
+          setPinError({ new: 'O PIN deve ter exatamente 4 digitos numericos' })
         } else {
           setPinError({ general: (json as { error?: string }).error ?? 'Erro ao alterar PIN' })
         }
@@ -940,10 +940,10 @@ export default function ConfiguracoesPage() {
               error={pinError?.current}
             />
             <Input
-              label="Novo PIN (4 a 8 digitos)"
+              label="Novo PIN (4 digitos)"
               type="password"
               inputMode="numeric"
-              maxLength={8}
+              maxLength={4}
               value={newPin}
               onChange={e => { setNewPin(e.target.value.replace(/\D/g, '')); setPinError(null) }}
               placeholder="Digite o novo PIN"

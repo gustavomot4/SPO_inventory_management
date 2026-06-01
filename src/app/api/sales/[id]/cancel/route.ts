@@ -2,14 +2,8 @@
 // POST /api/sales/[id]/cancel  — cancelar venda e reverter estoque
 // SPO — Sistema Pimenta Ousada | VEND-003
 // =============================================================================
-//
-// Acesso: Protegido por PIN (middleware cobre /api/sales/:id/cancel) — QA-008
-//
-// Só pode cancelar vendas com status = 'ACTIVE'.
-// Reverte estoque via StockMovement com type = CANCELLATION (quantity positivo).
-//
-// QA-004: verificação de status movida para DENTRO da transaction com updateMany
-// condicional — evita race condition que duplicava reversão de estoque.
+// Acesso: Protegido por PIN via middleware (QA-008).
+// QA-004: status verificado atomicamente dentro da tx via updateMany condicional.
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,12 +20,7 @@ function formatSaleItem(item: {
   quantity: number
   unitPriceCents: number
   subtotalCents: number
-  variation: {
-    sku: string
-    size: string
-    color: string
-    product: { name: string }
-  }
+  variation: { sku: string; size: string; color: string; product: { name: string } }
 }): SaleItemResponse {
   return {
     id: item.id,
@@ -51,12 +40,10 @@ export async function POST(
   { params }: RouteContext
 ): Promise<NextResponse> {
   try {
-    // Verificar existência antes da tx (early return rápido para NOT_FOUND)
     const existing = await prisma.sale.findUnique({
       where: { id: params.id },
       select: { id: true },
     })
-
     if (!existing) {
       return NextResponse.json<ApiError>(
         { error: 'Venda não encontrada', code: 'NOT_FOUND' },
@@ -70,19 +57,13 @@ export async function POST(
       if (typeof body.cancelReason === 'string' && body.cancelReason.trim().length > 0) {
         cancelReason = body.cancelReason.trim()
       }
-    } catch {
-      // body é opcional — ignorar erro de parse
-    }
+    } catch { /* body opcional */ }
 
-    // Executar cancelamento em $transaction
+    // QA-004: tudo dentro da tx. updateMany com where status=ACTIVE é atômico.
+    // Dois cancelamentos simultâneos: apenas um atualiza (count=1), o outro lança ALREADY_CANCELLED.
     const updatedSale = await prisma.$transaction(async (tx) => {
-      // QA-004: atualizar status com condição atômica — evita race condition
-      // Se dois cancelamentos chegarem ao mesmo tempo, apenas um vai ter count > 0
-      const markCancelled = await tx.sale.updateMany({
-        where: {
-          id: params.id,
-          status: SALE_STATUS.ACTIVE, // condição: só atualiza se ainda ACTIVE
-        },
+      const cancelResult = await tx.sale.updateMany({
+        where: { id: params.id, status: SALE_STATUS.ACTIVE },
         data: {
           status: SALE_STATUS.CANCELLED,
           cancelledAt: new Date().toISOString(),
@@ -90,28 +71,22 @@ export async function POST(
         },
       })
 
-      if (markCancelled.count === 0) {
-        // Venda já foi cancelada por outro request simultâneo
+      if (cancelResult.count === 0) {
         throw Object.assign(new Error('ALREADY_CANCELLED'), { code: 'ALREADY_CANCELLED' })
       }
 
-      // 1. Buscar venda com items para reverter estoque
       const sale = await tx.sale.findUnique({
         where: { id: params.id },
         include: { items: true },
       })
-
       if (!sale) throw new Error('Sale not found inside transaction')
 
-      // 2. Para cada item: reverter estoque + criar StockMovement CANCELLATION
       for (const item of sale.items) {
         const variation = await tx.productVariation.findUnique({
           where: { id: item.variationId },
           select: { stockQuantity: true },
         })
-
-        const currentStock = variation?.stockQuantity ?? 0
-        const newStock = currentStock + item.quantity
+        const newStock = (variation?.stockQuantity ?? 0) + item.quantity
 
         await tx.productVariation.update({
           where: { id: item.variationId },
@@ -123,14 +98,13 @@ export async function POST(
             variationId: item.variationId,
             saleId: sale.id,
             type: MOVEMENT_TYPE.CANCELLATION,
-            quantity: item.quantity, // POSITIVO — reversão ao estoque
+            quantity: item.quantity,
             balanceAfter: newStock,
             notes: cancelReason,
           },
         })
       }
 
-      // 3. Retornar venda atualizada com todos os dados para o response
       const cancelled = await tx.sale.findUnique({
         where: { id: params.id },
         include: {
@@ -139,9 +113,7 @@ export async function POST(
             include: {
               variation: {
                 select: {
-                  sku: true,
-                  size: true,
-                  color: true,
+                  sku: true, size: true, color: true,
                   product: { select: { name: true } },
                 },
               },
@@ -149,7 +121,6 @@ export async function POST(
           },
         },
       })
-
       return cancelled!
     })
 

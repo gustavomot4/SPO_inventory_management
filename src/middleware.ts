@@ -6,13 +6,12 @@
 // Rotas protegidas (requerem PIN):
 //   Páginas: /configuracoes, /relatorios
 //   APIs:    /api/settings (mutações), /api/reports, /api/card-machines,
-//            /api/categories (mutações), /api/sales/:id/cancel
+//            /api/categories, /api/sales/:id/cancel
 //
-// Exceções públicas (sem PIN):
-//   GET /api/settings — leitura usada pela comanda e dashboard
+// Exceção pública: GET /api/settings — comanda e dashboard lêem sem PIN
 //
-// QA-003: card-machines e categories estavam sem proteção na API
-// QA-008: cancelamento de venda exige PIN (operação destrutiva)
+// QA-003: card-machines e categories estavam desprotegidas na API
+// QA-008: cancelamento de venda é operação destrutiva — exige PIN
 // =============================================================================
 
 import { getIronSession } from 'iron-session'
@@ -31,7 +30,6 @@ export async function middleware(request: NextRequest) {
   const session = await getIronSession<SessionData>(request, response, sessionOptions)
 
   if (!session.isPinVerified) {
-    // Rotas de API retornam 401 JSON (não redirect) para não quebrar fetch() no cliente
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
         { error: 'Não autorizado. PIN necessário.', code: 'UNAUTHORIZED' },
@@ -51,8 +49,8 @@ export const config = {
     '/relatorios/:path*',
     '/api/settings/:path*',
     '/api/reports/:path*',
-    '/api/card-machines/:path*',  // QA-003: maquininhas são área protegida (RN-007.4)
-    '/api/categories/:path*',     // QA-003: categorias são configuração protegida
-    '/api/sales/:id/cancel',      // QA-008: cancelamento é operação destrutiva
+    '/api/card-machines/:path*',
+    '/api/categories/:path*',
+    '/api/sales/:id/cancel',
   ],
 }

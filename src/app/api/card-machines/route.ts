@@ -3,19 +3,15 @@
 // POST /api/card-machines  — criar maquininha
 // SPO — Sistema Pimenta Ousada | MAQU-001
 // =============================================================================
-//
-// Acesso: Público (sem PIN) — a tela de configurações já é protegida no middleware.
-// RN-010: feeBasisPoints >= 0 | name 1–100 chars | soft delete via isActive=false
+// Acesso: Protegido por PIN via middleware (QA-003).
+// QA-007: feeBasisPoints máx 5000 basis points (50%)
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import type { ApiSuccess, ApiError, CardMachineResponse } from '@/types'
 
-// ---------------------------------------------------------------------------
-// GET /api/card-machines
-// Query: ?includeInactive=true  → retorna todas (ativas + inativas)
-// ---------------------------------------------------------------------------
+const FEE_MAX_BASIS_POINTS = 5000
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -46,76 +42,42 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// POST /api/card-machines
-// Body: { name: string, feeBasisPoints: number }
-// ---------------------------------------------------------------------------
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     let body: unknown
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json<ApiError>(
-        { error: 'Body inválido', code: 'INVALID_BODY' },
-        { status: 400 }
-      )
+      return NextResponse.json<ApiError>({ error: 'Body inválido', code: 'INVALID_BODY' }, { status: 400 })
     }
 
     const { name, feeBasisPoints } = body as Record<string, unknown>
 
-    // Validar name
-    if (name === undefined || name === null) {
-      return NextResponse.json<ApiError>(
-        { error: 'O campo "name" é obrigatório', code: 'MISSING_FIELDS' },
-        { status: 400 }
-      )
-    }
-    if (typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 100) {
+    if (!name || typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 100) {
       return NextResponse.json<ApiError>(
         { error: 'O nome deve ter entre 1 e 100 caracteres', code: 'INVALID_NAME' },
         { status: 400 }
       )
     }
 
-    // Validar feeBasisPoints
-    if (feeBasisPoints === undefined || feeBasisPoints === null) {
-      return NextResponse.json<ApiError>(
-        { error: 'O campo "feeBasisPoints" é obrigatório', code: 'MISSING_FIELDS' },
-        { status: 400 }
-      )
-    }
     if (
       typeof feeBasisPoints !== 'number' ||
       !Number.isInteger(feeBasisPoints) ||
       feeBasisPoints < 0 ||
-      feeBasisPoints > 5000  // QA-007: máx 50% (taxas reais no Brasil raramente passam de 10%)
+      feeBasisPoints > FEE_MAX_BASIS_POINTS
     ) {
       return NextResponse.json<ApiError>(
-        { error: 'A taxa deve ser um inteiro entre 0 e 5000 basis points (máx 50%)', code: 'INVALID_FEE' },
+        { error: `A taxa deve ser um inteiro entre 0 e ${FEE_MAX_BASIS_POINTS} basis points (máx 50%)`, code: 'INVALID_FEE' },
         { status: 400 }
       )
     }
 
     const machine = await prisma.cardMachine.create({
-      data: {
-        name: name.trim(),
-        feeBasisPoints,
-      },
+      data: { name: (name as string).trim(), feeBasisPoints: feeBasisPoints as number },
     })
 
     return NextResponse.json<ApiSuccess<CardMachineResponse>>(
-      {
-        data: {
-          id: machine.id,
-          name: machine.name,
-          feeBasisPoints: machine.feeBasisPoints,
-          isActive: machine.isActive,
-          createdAt: machine.createdAt,
-          updatedAt: machine.updatedAt,
-        },
-      },
+      { data: { id: machine.id, name: machine.name, feeBasisPoints: machine.feeBasisPoints, isActive: machine.isActive, createdAt: machine.createdAt, updatedAt: machine.updatedAt } },
       { status: 201 }
     )
   } catch (error) {
