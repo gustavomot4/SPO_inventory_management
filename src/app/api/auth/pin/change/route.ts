@@ -7,6 +7,9 @@
 //   Requer sessao ativa (isPinVerified = true)
 //   body: { currentPin, newPin, confirmPin }
 //   -> 200 { ok: true }
+//
+// QA-015: PIN fixado em exatamente 4 digitos — compativel com PIN_LENGTH = 4
+//         da tela de verificacao (pin/page.tsx).
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,7 +20,6 @@ import { sessionOptions, type SessionData } from '@/lib/session'
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    // 1. Verificar que o usuario esta autenticado
     const dummyRes = new Response()
     const session = await getIronSession<SessionData>(
       request,
@@ -31,7 +33,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
-    // 2. Ler body
     let body: { currentPin?: unknown; newPin?: unknown; confirmPin?: unknown }
     try {
       body = await request.json()
@@ -41,7 +42,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const { currentPin, newPin, confirmPin } = body
 
-    // 3. Validar campos obrigatorios
     if (!currentPin || !newPin || !confirmPin) {
       return NextResponse.json(
         { error: 'Preencha o PIN atual, o novo PIN e a confirmacao', code: 'MISSING_FIELDS' },
@@ -59,15 +59,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
-    // 4. Validar novo PIN: apenas digitos, 4-8 caracteres
-    if (!/^\d{4,8}$/.test(newPin)) {
+    // QA-015: exatamente 4 digitos — tela de PIN tem PIN_LENGTH = 4 fixo
+    if (!/^\d{4}$/.test(newPin)) {
       return NextResponse.json(
-        { error: 'O novo PIN deve ter entre 4 e 8 digitos numericos', code: 'INVALID_NEW_PIN' },
+        { error: 'O novo PIN deve ter exatamente 4 digitos numericos', code: 'INVALID_NEW_PIN' },
         { status: 400 }
       )
     }
 
-    // 5. Confirmar que newPin === confirmPin
     if (newPin !== confirmPin) {
       return NextResponse.json(
         { error: 'O novo PIN e a confirmacao nao coincidem', code: 'PIN_MISMATCH' },
@@ -75,14 +74,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
-    // 6. Verificar PIN atual
     const settings = await prisma.settings.findFirst({ select: { id: true, pinHash: true } })
 
     let currentPinValid = false
     if (settings?.pinHash) {
       currentPinValid = await bcrypt.compare(currentPin, settings.pinHash)
     } else {
-      // Fallback: APP_PIN do .env
       currentPinValid = currentPin === (process.env.APP_PIN ?? '1234')
     }
 
@@ -93,10 +90,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
-    // 7. Gerar hash do novo PIN (bcrypt, custo 12)
     const newHash = await bcrypt.hash(newPin, 12)
 
-    // 8. Salvar no banco -- upsert do singleton Settings
     if (settings?.id) {
       await prisma.settings.update({
         where: { id: settings.id },

@@ -18,12 +18,26 @@ const PIN_LENGTH = 4
 
 function PinScreen() {
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') ?? '/produtos'
+  // QA-016: sanitizar redirect — aceitar apenas caminhos relativos internos
+  const rawRedirect = searchParams.get('redirect') ?? '/produtos'
+  const redirectTo = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+    ? rawRedirect
+    : '/produtos'
 
   const [digits, setDigits] = useState<string[]>(Array(PIN_LENGTH).fill(''))
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  // QA-025: redirecionar se sessão PIN já está ativa
+  useEffect(() => {
+    fetch('/api/auth/status')
+      .then(r => r.json())
+      .then((j: { authenticated: boolean }) => {
+        if (j.authenticated) window.location.href = redirectTo
+      })
+      .catch(() => {})
+  }, [redirectTo])
 
   // Foca no primeiro input ao montar
   useEffect(() => {
@@ -161,7 +175,7 @@ function PinScreen() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-4">
-          Área protegida — somente pessoal autorizado
+                Área protegida — somente pessoal autorizado
         </p>
       </div>
     </div>

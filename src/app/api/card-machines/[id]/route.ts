@@ -1,8 +1,7 @@
 // =============================================================================
-// GET    /api/card-machines/[id]  — detalhar maquininha
-// PATCH  /api/card-machines/[id]  — atualizar nome, taxa ou status
-// DELETE /api/card-machines/[id]  — inativar (soft delete: isActive = false)
+// GET/PATCH/DELETE /api/card-machines/[id]
 // SPO — Sistema Pimenta Ousada | MAQU-001
+// QA-007: feeBasisPoints máx 5000 (50%)
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,9 +10,7 @@ import type { ApiSuccess, ApiError, CardMachineResponse } from '@/types'
 
 type RouteContext = { params: { id: string } }
 
-// ---------------------------------------------------------------------------
-// GET /api/card-machines/[id]
-// ---------------------------------------------------------------------------
+const FEE_MAX_BASIS_POINTS = 5000
 
 export async function GET(
   _request: NextRequest,
@@ -23,10 +20,7 @@ export async function GET(
     const machine = await prisma.cardMachine.findUnique({
       where: { id: params.id },
       include: {
-        installments: {
-          where: { isActive: true },
-          orderBy: { installments: 'asc' },
-        },
+        installments: { where: { isActive: true }, orderBy: { installments: 'asc' } },
       },
     })
 
@@ -65,12 +59,6 @@ export async function GET(
   }
 }
 
-// ---------------------------------------------------------------------------
-// PATCH /api/card-machines/[id]
-// Body: { name?, feeBasisPoints?, isActive? } — pelo menos um obrigatório
-// Nota: updatedAt não incluído — trigger SQL cuida do update automático
-// ---------------------------------------------------------------------------
-
 export async function PATCH(
   request: NextRequest,
   { params }: RouteContext
@@ -80,15 +68,11 @@ export async function PATCH(
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json<ApiError>(
-        { error: 'Body inválido', code: 'INVALID_BODY' },
-        { status: 400 }
-      )
+      return NextResponse.json<ApiError>({ error: 'Body inválido', code: 'INVALID_BODY' }, { status: 400 })
     }
 
     const { name, feeBasisPoints, isActive } = body as Record<string, unknown>
 
-    // Validar campos opcionais quando presentes
     if (name !== undefined) {
       if (typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 100) {
         return NextResponse.json<ApiError>(
@@ -103,10 +87,10 @@ export async function PATCH(
         typeof feeBasisPoints !== 'number' ||
         !Number.isInteger(feeBasisPoints) ||
         feeBasisPoints < 0 ||
-        feeBasisPoints > 5000  // QA-007: máx 50%
+        feeBasisPoints > FEE_MAX_BASIS_POINTS
       ) {
         return NextResponse.json<ApiError>(
-          { error: 'A taxa deve ser um inteiro entre 0 e 5000 basis points (máx 50%)', code: 'INVALID_FEE' },
+          { error: `A taxa informada é muito alta. O valor máximo permitido é 50% (ex: 1,99 para 1,99%)`, code: 'INVALID_FEE' },
           { status: 400 }
         )
       }
@@ -119,7 +103,6 @@ export async function PATCH(
       )
     }
 
-    // Montar dados de update — apenas campos presentes
     const updateData: { name?: string; feeBasisPoints?: number; isActive?: boolean } = {}
     if (name !== undefined) updateData.name = (name as string).trim()
     if (feeBasisPoints !== undefined) updateData.feeBasisPoints = feeBasisPoints as number
@@ -162,11 +145,6 @@ export async function PATCH(
     )
   }
 }
-
-// ---------------------------------------------------------------------------
-// DELETE /api/card-machines/[id]
-// Soft delete: isActive = false (nunca excluir do banco — histórico de vendas)
-// ---------------------------------------------------------------------------
 
 export async function DELETE(
   _request: NextRequest,

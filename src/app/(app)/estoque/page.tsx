@@ -56,11 +56,17 @@ function EstoqueAtualTab() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<StockFilter>('todos')
 
+  const [hasMore, setHasMore] = useState(false)
+
   useEffect(() => {
     fetch('/api/products?pageSize=100')
       .then(r => r.json())
       .then((json: ApiSuccess<ProductListItem[]>) => {
-        if ('data' in json) setProducts(json.data)
+        if ('data' in json) {
+          setProducts(json.data)
+          // QA-023: avisar se a lista foi truncada (loja com mais de 100 SKUs)
+          if (json.meta?.hasNextPage) setHasMore(true)
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -111,6 +117,13 @@ function EstoqueAtualTab() {
           </button>
         ))}
       </div>
+
+      {/* QA-023: aviso de lista truncada em lojas com mais de 100 SKUs */}
+      {hasMore && (
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          Exibindo os primeiros 100 produtos cadastrados. Filtre por categoria para ver todos.
+        </div>
+      )}
 
       {/* Tabela */}
       {filtered.length === 0 ? (
