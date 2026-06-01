@@ -37,7 +37,7 @@ export async function PATCH(
       if (typeof feeBasisPoints !== 'number' || !Number.isInteger(feeBasisPoints) ||
         feeBasisPoints < 0 || feeBasisPoints > 5000) {
         return NextResponse.json<ApiError>(
-          { error: 'O campo "feeBasisPoints" deve ser um inteiro entre 0 e 5000 basis points (máx 50%)', code: 'INVALID_FEE' },
+          { error: 'A taxa informada é muito alta. O valor máximo permitido é 50% (ex: 1,99 para 1,99%)', code: 'INVALID_FEE' },
           { status: 400 }
         )
       }

@@ -254,6 +254,7 @@ export default function ProdutoDetalhePage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [reactivating, setReactivating] = useState(false)
+  const [reactivateError, setReactivateError] = useState<string | null>(null)
 
   // ── Carregar produto e categorias ──
   const loadProduct = useCallback(async () => {
@@ -375,7 +376,8 @@ export default function ProdutoDetalhePage() {
   // ── Inativar variação ──
   async function handleDeactivateVariation(varId: string) {
     try {
-      await fetch(`/api/products/${productId}/variations/${varId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/products/${productId}/variations/${varId}`, { method: 'DELETE' })
+      if (!res.ok) return // QA-028: não atualizar UI se API falhou
       setProduct(prev =>
         prev
           ? { ...prev, variations: prev.variations.map(v => v.id === varId ? { ...v, isActive: false } : v) }
@@ -450,6 +452,7 @@ export default function ProdutoDetalhePage() {
   // ── Reativar produto ──
   async function handleReactivate() {
     setReactivating(true)
+    setReactivateError(null)
     try {
       const res = await fetch(`/api/products/${productId}`, {
         method: 'PATCH',
@@ -457,8 +460,15 @@ export default function ProdutoDetalhePage() {
         body: JSON.stringify({ isActive: true }),
       })
       const json: ApiResponse<ProductResponse> = await res.json()
+      if (!res.ok) {
+        // QA-029: feedback de erro ao usuário
+        setReactivateError('error' in json ? json.error : 'Erro ao reativar produto')
+        return
+      }
       if ('data' in json) setProduct(json.data)
-    } catch { /* silencioso */ } finally {
+    } catch {
+      setReactivateError('Erro de conexão. Tente novamente.')
+    } finally {
       setReactivating(false)
     }
   }
@@ -707,6 +717,9 @@ export default function ProdutoDetalhePage() {
             >
               Reativar
             </Button>
+            {reactivateError && (
+              <p className="mt-2 text-xs text-destructive">{reactivateError}</p>
+            )}
           </div>
         </div>
       )}

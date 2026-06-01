@@ -31,7 +31,7 @@ function Comanda({ sale, settings }: { sale: SaleResponse; settings: SettingsRes
   const dateStr = formatDateTime(new Date(sale.createdAt))
 
   return (
-    <div className="max-w-[320px] mx-auto font-mono text-[11px] leading-relaxed bg-white rounded-xl border border-border shadow-sm p-5 print-only-visible">
+    <div className="max-w-[320px] mx-auto font-mono text-[11px] leading-relaxed bg-white rounded-xl border border-border shadow-sm p-5 print-only">
       {/* Cabeçalho da loja */}
       <div className="text-center mb-3">
         <p className="font-bold text-sm uppercase tracking-wide">{settings?.shopName ?? 'Pimenta Ousada'}</p>
@@ -45,6 +45,9 @@ function Comanda({ sale, settings }: { sale: SaleResponse; settings: SettingsRes
       <div className="text-center mb-2">
         <p>Venda: #{saleCode}</p>
         <p>{dateStr}</p>
+        {sale.status === 'CANCELLED' && (
+          <p className="font-bold mt-1">*** VENDA CANCELADA ***</p>
+        )}
       </div>
 
       <p className="border-t border-dashed border-gray-400 my-2" />

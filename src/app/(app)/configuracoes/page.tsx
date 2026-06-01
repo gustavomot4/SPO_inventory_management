@@ -92,6 +92,7 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
     if (isNaN(qty) || qty < 2 || qty > 12) { setInstError('Parcelas: 2 a 12'); return }
     let bps = 0
     try { bps = parseBasisPoints(newInstFee) } catch { setInstError('Taxa inválida (ex: 2,99)'); return }
+    if (bps > 5000) { setInstError('A taxa não pode ser maior que 50%'); return }
     setAddingInst(true)
     try {
       const res = await fetch(`/api/card-machines/${machine.id}/installments`, {
@@ -116,6 +117,7 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
   async function handleSaveInstallment(id: string) {
     let bps = 0
     try { bps = parseBasisPoints(editInstFee) } catch { return }
+    if (bps > 5000) { return }
     setSavingInst(true)
     try {
       const res = await fetch(`/api/card-machines/${machine.id}/installments/${id}`, {
@@ -149,7 +151,8 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
       errs.fee = 'Taxa obrigatória'
     } else {
       try {
-        parseBasisPoints(form.fee)
+        const bps = parseBasisPoints(form.fee)
+        if (bps > 5000) errs.fee = 'A taxa não pode ser maior que 50%'
       } catch {
         errs.fee = 'Taxa inválida (ex: 1,99)'
       }
@@ -569,7 +572,12 @@ export default function ConfiguracoesPage() {
     const errs: typeof addErrors = {}
     if (!addForm.name.trim()) errs.name = 'Nome obrigatório'
     if (!addForm.fee.trim()) errs.fee = 'Taxa obrigatória'
-    else { try { parseBasisPoints(addForm.fee) } catch { errs.fee = 'Taxa inválida (ex: 1,99)' } }
+    else {
+      try {
+        const bps = parseBasisPoints(addForm.fee)
+        if (bps > 5000) errs.fee = 'A taxa não pode ser maior que 50%'
+      } catch { errs.fee = 'Taxa inválida (ex: 1,99)' }
+    }
     if (Object.keys(errs).length > 0) { setAddErrors(errs); return }
     setAdding(true)
     try {
@@ -588,11 +596,14 @@ export default function ConfiguracoesPage() {
   }
 
   async function handleUpdate(id: string, form: { name: string; fee: string }): Promise<string | null> {
+    let bps: number
+    try { bps = parseBasisPoints(form.fee) } catch { return 'Taxa inválida (ex: 1,99)' }
+    if (bps > 5000) return 'A taxa não pode ser maior que 50%'
     try {
       const res = await fetch(`/api/card-machines/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name.trim(), feeBasisPoints: parseBasisPoints(form.fee) }),
+        body: JSON.stringify({ name: form.name.trim(), feeBasisPoints: bps }),
       })
       const json: ApiResponse<CardMachineResponse> = await res.json()
       if (!res.ok) return 'error' in json ? json.error : 'Erro ao salvar'

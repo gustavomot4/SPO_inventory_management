@@ -90,7 +90,7 @@ export async function PATCH(
         feeBasisPoints > FEE_MAX_BASIS_POINTS
       ) {
         return NextResponse.json<ApiError>(
-          { error: `A taxa deve ser um inteiro entre 0 e ${FEE_MAX_BASIS_POINTS} basis points (máx 50%)`, code: 'INVALID_FEE' },
+          { error: `A taxa informada é muito alta. O valor máximo permitido é 50% (ex: 1,99 para 1,99%)`, code: 'INVALID_FEE' },
           { status: 400 }
         )
       }
