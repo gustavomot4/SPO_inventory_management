@@ -22,3 +22,16 @@ export const prisma =
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
 }
+
+// QA-002: Ativar foreign keys (SQLite desativa por padrão — Prisma não ativa automaticamente)
+// QA-011: WAL mode para leituras concorrentes sem bloquear escritas
+//         busy_timeout para aguardar lock em vez de retornar SQLITE_BUSY imediatamente
+//
+// Executado apenas quando DATABASE_URL está disponível (runtime).
+// Durante o build do Next.js DATABASE_URL não existe — os PRAGMAs seriam executados
+// novamente pelo entrypoint em runtime de qualquer forma.
+if (process.env.DATABASE_URL) {
+  prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON').catch(() => {})
+  prisma.$executeRawUnsafe('PRAGMA journal_mode = WAL').catch(() => {})
+  prisma.$executeRawUnsafe('PRAGMA busy_timeout = 5000').catch(() => {})
+}

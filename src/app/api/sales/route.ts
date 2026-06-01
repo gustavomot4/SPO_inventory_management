@@ -236,11 +236,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // --- Buscar todas as variacoes em uma unica query ---
+    // --- QA-005: Rejeitar variationIds duplicados no mesmo pedido ---
     const variationIds = (items as Array<{ variationId: string; quantity: number }>).map(
       (i) => i.variationId
     )
+    if (new Set(variationIds).size !== variationIds.length) {
+      return NextResponse.json<ApiError>(
+        { error: 'Itens duplicados no pedido: use um unico item por variacao', code: 'DUPLICATE_ITEMS' },
+        { status: 400 }
+      )
+    }
 
+    // --- Buscar todas as variacoes em uma unica query para validacao de produto/ativo ---
     const variations = await prisma.productVariation.findMany({
       where: { id: { in: variationIds } },
       select: {
@@ -260,11 +267,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const variationMap = new Map(variations.map((v) => [v.id, v]))
 
+    // QA-001: currentStock removido de resolvedItems — leitura sera feita DENTRO da tx
     type ResolvedItem = {
       variationId: string
       quantity: number
       unitPriceCents: number
-      currentStock: number
     }
     const resolvedItems: ResolvedItem[] = []
 
@@ -305,7 +312,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         variationId: it.variationId,
         quantity: it.quantity,
         unitPriceCents: v.product.priceCents, // RN-004: snapshot do banco
-        currentStock: v.stockQuantity,
+        // QA-001: currentStock NAO armazenado aqui — seria valor stale (TOCTOU)
       })
     }
 
@@ -398,12 +405,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       })
 
       for (const item of resolvedItems) {
-        const newStock = item.currentStock - item.quantity
-
-        await tx.productVariation.update({
-          where: { id: item.variationId },
-          data: { stockQuantity: newStock },
+        // QA-001: updateMany com condicao atomica — evita TOCTOU / race condition
+        // Se outro request ja decrementou o estoque, stockQuantity < item.quantity
+        // e o update nao ocorre (count = 0), lancando erro e revertendo a tx.
+        const updated = await tx.productVariation.updateMany({
+          where: {
+            id: item.variationId,
+            stockQuantity: { gte: item.quantity },
+          },
+          data: { stockQuantity: { decrement: item.quantity } },
         })
+
+        if (updated.count === 0) {
+          throw Object.assign(
+            new Error('INSUFFICIENT_STOCK'),
+            { variationId: item.variationId }
+          )
+        }
+
+        // Ler o valor atualizado para o balanceAfter do movimento
+        const afterUpdate = await tx.productVariation.findUnique({
+          where: { id: item.variationId },
+          select: { stockQuantity: true },
+        })
+        const balanceAfter = afterUpdate?.stockQuantity ?? 0
 
         await tx.stockMovement.create({
           data: {
@@ -411,7 +436,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             saleId: created.id,
             type: MOVEMENT_TYPE.SALE,
             quantity: -item.quantity,
-            balanceAfter: newStock,
+            balanceAfter,
             notes: null,
           },
         })
@@ -425,6 +450,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 201 }
     )
   } catch (error) {
+    // QA-001: erro lancado pela tx quando estoque insuficiente em concorrencia
+    if (error instanceof Error && error.message === 'INSUFFICIENT_STOCK') {
+      const varId = (error as Error & { variationId?: string }).variationId
+      return NextResponse.json<ApiError>(
+        { error: 'Estoque insuficiente — produto vendido por outro acesso simultaneo', code: 'INSUFFICIENT_STOCK', details: { variationId: varId } },
+        { status: 422 }
+      )
+    }
     console.error('[POST /api/sales]', error)
     return NextResponse.json<ApiError>(
       { error: 'Erro interno do servidor', code: 'INTERNAL_ERROR' },

@@ -214,6 +214,15 @@ export async function PATCH(
       )
     }
 
+    // QA-013: ao reativar produto, reativar também suas variações
+    // Sem isso o produto reaparece na listagem com variationCount = 0 (invendável)
+    if (isActive === true) {
+      await prisma.productVariation.updateMany({
+        where: { productId: params.id },
+        data: { isActive: true },
+      })
+    }
+
     const product = await prisma.product.update({
       where: { id: params.id },
       data: updateData,

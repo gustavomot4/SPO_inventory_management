@@ -27,7 +27,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const categoryId = searchParams.get('categoryId') || undefined
 
+    // QA-009: limite de 2000 variações por consulta — suficiente para qualquer loja física
     const variations = await prisma.productVariation.findMany({
+      take: 2000,
       where: {
         isActive: true,
         product: {
