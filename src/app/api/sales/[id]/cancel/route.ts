@@ -55,6 +55,13 @@ export async function POST(
     try {
       const body = await request.json() as Record<string, unknown>
       if (typeof body.cancelReason === 'string' && body.cancelReason.trim().length > 0) {
+        // QA-043: limite de tamanho em cancelReason
+        if (body.cancelReason.trim().length > 300) {
+          return NextResponse.json<ApiError>(
+            { error: 'O motivo de cancelamento deve ter no máximo 300 caracteres', code: 'INVALID_CANCEL_REASON' },
+            { status: 400 }
+          )
+        }
         cancelReason = body.cancelReason.trim()
       }
     } catch { /* body opcional */ }
@@ -81,17 +88,19 @@ export async function POST(
       })
       if (!sale) throw new Error('Sale not found inside transaction')
 
+      // QA-035: increment atomico — consistente com o padrao do projeto e
+      // seguro para eventual migracao para PostgreSQL.
       for (const item of sale.items) {
-        const variation = await tx.productVariation.findUnique({
+        await tx.productVariation.update({
+          where: { id: item.variationId },
+          data: { stockQuantity: { increment: item.quantity } },
+        })
+
+        const afterUpdate = await tx.productVariation.findUnique({
           where: { id: item.variationId },
           select: { stockQuantity: true },
         })
-        const newStock = (variation?.stockQuantity ?? 0) + item.quantity
-
-        await tx.productVariation.update({
-          where: { id: item.variationId },
-          data: { stockQuantity: newStock },
-        })
+        const balanceAfter = afterUpdate?.stockQuantity ?? 0
 
         await tx.stockMovement.create({
           data: {
@@ -99,7 +108,7 @@ export async function POST(
             saleId: sale.id,
             type: MOVEMENT_TYPE.CANCELLATION,
             quantity: item.quantity,
-            balanceAfter: newStock,
+            balanceAfter,
             notes: cancelReason,
           },
         })

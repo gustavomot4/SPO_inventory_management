@@ -10,6 +10,8 @@
 //
 // QA-015: PIN fixado em exatamente 4 digitos — compativel com PIN_LENGTH = 4
 //         da tela de verificacao (pin/page.tsx).
+// QA-032: Rate limiting adicionado — sem isso, atacante com cookie valido podia
+//         testar todas as 10.000 combinacoes de PIN de 4 digitos sem ser bloqueado.
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,6 +19,12 @@ import { getIronSession } from 'iron-session'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { sessionOptions, type SessionData } from '@/lib/session'
+import {
+  getRateLimitKey,
+  checkRateLimit,
+  recordFailedAttempt,
+  clearAttempts,
+} from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -30,6 +38,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         { error: 'Nao autorizado. Faca login primeiro.', code: 'UNAUTHORIZED' },
         { status: 401 }
+      )
+    }
+
+    // QA-032: rate limiting — mesmo limite do endpoint de verificacao (5/10min)
+    const rlKey = getRateLimitKey(request, 'pin-change')
+    if (!checkRateLimit(rlKey)) {
+      return NextResponse.json(
+        { error: 'Muitas tentativas incorretas. Aguarde 10 minutos.', code: 'RATE_LIMITED' },
+        { status: 429 }
       )
     }
 
@@ -84,11 +101,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (!currentPinValid) {
+      // QA-032: registrar tentativa falha
+      recordFailedAttempt(rlKey)
       return NextResponse.json(
         { error: 'PIN atual incorreto', code: 'WRONG_CURRENT_PIN' },
         { status: 401 }
       )
     }
+
+    // PIN correto — limpar contador de tentativas
+    clearAttempts(rlKey)
 
     const newHash = await bcrypt.hash(newPin, 12)
 

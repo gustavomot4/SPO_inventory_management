@@ -149,6 +149,22 @@ export async function DELETE(
   { params }: RouteContext
 ): Promise<NextResponse> {
   try {
+    // QA-044: bloquear inativação se houver produtos ativos vinculados.
+    // Sem esta verificação, produtos ficam com categoryId apontando para categoria inativa
+    // e tornam-se impossíveis de editar (API rejeita categoryId inativo no PATCH).
+    const activeProducts = await prisma.product.count({
+      where: { categoryId: params.id, isActive: true, deletedAt: null },
+    })
+    if (activeProducts > 0) {
+      return NextResponse.json<ApiError>(
+        {
+          error: `Não é possível inativar: ${activeProducts} produto(s) ativo(s) vinculado(s) a esta categoria. Mova-os para outra categoria antes de inativar.`,
+          code: 'CATEGORY_HAS_ACTIVE_PRODUCTS',
+        },
+        { status: 422 }
+      )
+    }
+
     const category = await prisma.category.update({
       where: { id: params.id },
       data: { isActive: false },

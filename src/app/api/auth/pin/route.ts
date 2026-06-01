@@ -6,6 +6,7 @@
 //
 // QA-010: Rate limiting — bloqueia apos 5 tentativas erradas em 10 minutos
 // QA-012: timingSafeEqual no fallback para evitar timing attack
+// QA-032: funcoes de rate limiting extraidas para lib/rate-limit.ts
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -14,39 +15,12 @@ import bcrypt from 'bcryptjs'
 import { timingSafeEqual } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { sessionOptions, type SessionData } from '@/lib/session'
-
-// QA-010: rate limiting em memoria (sistema single-instance)
-const RATE_LIMIT_MAX = 5
-const RATE_LIMIT_WINDOW = 10 * 60 * 1000 // 10 minutos
-
-const attempts = new Map<string, { count: number; resetAt: number }>()
-
-function getRateLimitKey(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for')
-  const ip = forwarded ? (forwarded.split(',')[0]?.trim() ?? 'local') : 'local'
-  return `pin:${ip}`
-}
-
-function checkRateLimit(key: string): boolean {
-  const now = Date.now()
-  const entry = attempts.get(key)
-  if (!entry || now > entry.resetAt) return true
-  return entry.count < RATE_LIMIT_MAX
-}
-
-function recordFailedAttempt(key: string): void {
-  const now = Date.now()
-  const entry = attempts.get(key)
-  if (!entry || now > entry.resetAt) {
-    attempts.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW })
-  } else {
-    entry.count++
-  }
-}
-
-function clearAttempts(key: string): void {
-  attempts.delete(key)
-}
+import {
+  getRateLimitKey,
+  checkRateLimit,
+  recordFailedAttempt,
+  clearAttempts,
+} from '@/lib/rate-limit'
 
 // QA-012: comparacao constant-time
 function safeCompareString(a: string, b: string): boolean {
@@ -69,7 +43,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'PIN obrigatorio' }, { status: 400 })
     }
 
-    const rlKey = getRateLimitKey(request)
+    const rlKey = getRateLimitKey(request, 'pin')
     if (!checkRateLimit(rlKey)) {
       return NextResponse.json(
         { error: 'Muitas tentativas incorretas. Aguarde 10 minutos.', code: 'RATE_LIMITED' },

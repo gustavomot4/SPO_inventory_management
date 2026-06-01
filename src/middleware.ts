@@ -1,17 +1,24 @@
 // =============================================================================
-// middleware.ts — Proteção por PIN em rotas sensíveis
+// middleware.ts — Protecao por PIN em rotas sensiveis
 // SPO — Sistema Pimenta Ousada
 // =============================================================================
 //
 // Rotas protegidas (requerem PIN):
-//   Páginas: /configuracoes, /relatorios
-//   APIs:    /api/settings (mutações), /api/reports, /api/card-machines,
-//            /api/categories, /api/sales/:id/cancel
+//   Paginas: /configuracoes, /relatorios
+//   APIs:    /api/settings (mutacoes), /api/reports, /api/card-machines,
+//            /api/categories, /api/products (mutacoes), /api/stock-entries,
+//            /api/sales/:id/cancel
 //
-// Exceção pública: GET /api/settings — comanda e dashboard lêem sem PIN
+// Excecoes publicas (sem PIN):
+//   GET /api/settings      — comanda e dashboard leem sem PIN
+//   GET /api/products/*    — PDV (vendas/nova) precisa listar produtos sem autenticar
+//   GET /api/sales/[id]    — detalhe de venda para impressão da comanda após criar venda
 //
 // QA-003: card-machines e categories estavam desprotegidas na API
-// QA-008: cancelamento de venda é operação destrutiva — exige PIN
+// QA-008: cancelamento de venda e operacao destrutiva — exige PIN
+// QA-034: produtos (PATCH/DELETE/POST) e stock-entries (POST) exigem PIN —
+//         qualquer pessoa na rede local poderia alterar precos ou inativar produtos
+// QA-041: GET /api/sales (lista financeira) exige PIN — expunha faturamento sem autenticacao
 // =============================================================================
 
 import { getIronSession } from 'iron-session'
@@ -20,9 +27,22 @@ import { sessionOptions, type SessionData } from '@/lib/session'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const method = request.method
 
-  // GET /api/settings é público — comanda e dashboard lêem sem PIN
-  if (pathname.startsWith('/api/settings') && request.method === 'GET') {
+  // GET /api/settings e publico — comanda e dashboard leem sem PIN
+  if (pathname.startsWith('/api/settings') && method === 'GET') {
+    return NextResponse.next()
+  }
+
+  // GET /api/products/* e publico — PDV precisa listar produtos sem autenticar
+  if (pathname.startsWith('/api/products') && method === 'GET') {
+    return NextResponse.next()
+  }
+
+  // GET /api/sales/[id] e publico — tela de detalhe e comanda carregam sem PIN
+  // (vendas sao criadas com PIN ativo, mas a comanda precisa ser acessivel ao imprimir)
+  // GET /api/sales (lista) e GET /api/sales com filtros EXIGEM PIN (dados financeiros)
+  if (pathname.match(/^\/api\/sales\/[^\/]+$/) && method === 'GET') {
     return NextResponse.next()
   }
 
@@ -32,7 +52,7 @@ export async function middleware(request: NextRequest) {
   if (!session.isPinVerified) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
-        { error: 'Não autorizado. PIN necessário.', code: 'UNAUTHORIZED' },
+        { error: 'Nao autorizado. PIN necessario.', code: 'UNAUTHORIZED' },
         { status: 401 }
       )
     }
@@ -51,6 +71,9 @@ export const config = {
     '/api/reports/:path*',
     '/api/card-machines/:path*',
     '/api/categories/:path*',
-    '/api/sales/:id/cancel',
+    '/api/products/:path*',
+    '/api/stock-entries/:path*',
+    '/api/sales',        // QA-041: GET /api/sales (lista) — dados financeiros exigem PIN
+    '/api/sales/:path*', // QA-041: cobre /api/sales/:id/cancel e subrotas (exceto GET /[id] — ver logica acima)
   ],
 }

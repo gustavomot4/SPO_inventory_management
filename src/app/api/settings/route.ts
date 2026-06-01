@@ -18,15 +18,18 @@ import type { ApiSuccess, ApiError, SettingsResponse } from '@/types'
 // Cria o singleton com valores padrao se nao existir.
 // ---------------------------------------------------------------------------
 
+// ID fixo do singleton — garante que upsert nunca cria duplicatas (QA-040)
+const SETTINGS_SINGLETON_ID = 'spo-settings-singleton'
+
 export async function GET(): Promise<NextResponse> {
   try {
-    let settings = await prisma.settings.findFirst()
-
-    if (!settings) {
-      settings = await prisma.settings.create({
-        data: { shopName: 'Pimenta Ousada' },
-      })
-    }
+    // QA-040: upsert atomico — findFirst + create sem transacao criava registros
+    // duplicados se dois requests chegassem simultaneamente antes do 1o insert.
+    const settings = await prisma.settings.upsert({
+      where: { id: SETTINGS_SINGLETON_ID },
+      update: {},
+      create: { id: SETTINGS_SINGLETON_ID, shopName: 'Pimenta Ousada' },
+    })
 
     return NextResponse.json<ApiSuccess<SettingsResponse>>({
       data: {
@@ -107,22 +110,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       )
     }
 
-    // Garantir que o singleton existe
-    let settings = await prisma.settings.findFirst()
-    if (!settings) {
-      settings = await prisma.settings.create({
-        data: { shopName: 'Pimenta Ousada' },
-      })
-    }
-
     const updateData: { shopName?: string; address?: string | null; phone?: string | null } = {}
     if (shopName !== undefined) updateData.shopName = (shopName as string).trim()
     if (address !== undefined) updateData.address = address as string | null
     if (phone !== undefined) updateData.phone = phone as string | null
 
-    const updated = await prisma.settings.update({
-      where: { id: settings.id },
-      data: updateData,
+    // QA-040: upsert garante que o singleton existe antes de atualizar
+    const updated = await prisma.settings.upsert({
+      where: { id: SETTINGS_SINGLETON_ID },
+      update: updateData,
+      create: { id: SETTINGS_SINGLETON_ID, shopName: 'Pimenta Ousada', ...updateData },
     })
 
     return NextResponse.json<ApiSuccess<SettingsResponse>>({

@@ -4,12 +4,13 @@
 // SPO — Sistema Pimenta Ousada | EST-001
 // =============================================================================
 //
-// Acesso: Público (sem PIN).
+// Acesso: Protegido por PIN via middleware (QA-034).
 //
 // O POST executa 3 operações em $transaction:
-//   1. Criar StockEntry
-//   2. Criar StockMovement (tipo ENTRY, quantity positivo)
-//   3. Atualizar stockQuantity da variação
+//   1. Verificar variação (dentro da tx — QA-031)
+//   2. Criar StockEntry
+//   3. Atualizar stockQuantity via increment atômico (QA-031)
+//   4. Criar StockMovement com balanceAfter pós-increment
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -72,7 +73,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Validar receivedAt (opcional — se fornecido deve ser ISO 8601 string)
+    // QA-043: limite de tamanho em notes
+    if (notes !== undefined && notes !== null) {
+      if (typeof notes !== 'string' || notes.length > 500) {
+        return NextResponse.json<ApiError>(
+          { error: 'O campo "notes" deve ter no máximo 500 caracteres', code: 'INVALID_NOTES' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Validar receivedAt (opcional — se fornecido deve ser ISO 8601 string e não data futura)
     if (receivedAt !== undefined && receivedAt !== null) {
       if (typeof receivedAt !== 'string' || isNaN(Date.parse(receivedAt as string))) {
         return NextResponse.json<ApiError>(
@@ -80,84 +91,120 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           { status: 400 }
         )
       }
+      // QA-045: rejeitar datas futuras (tolerância de 24h para diferenças de fuso horário)
+      const receivedDate = new Date(receivedAt as string)
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      if (receivedDate > tomorrow) {
+        return NextResponse.json<ApiError>(
+          { error: 'A data de recebimento não pode ser no futuro', code: 'INVALID_DATE' },
+          { status: 400 }
+        )
+      }
     }
 
-    // Verificar que variação existe e está ativa
-    const variation = await prisma.productVariation.findUnique({
-      where: { id: variationId as string },
-      select: {
-        id: true,
-        sku: true,
-        stockQuantity: true,
-        isActive: true,
-        product: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    })
+    // QA-031: toda verificacao e escrita ocorre DENTRO da transaction.
+    // Antes, o stockQuantity era lido fora da tx — dois requests simultaneos liam o
+    // mesmo saldo e um sobrescrevia o resultado do outro (corrupcao silenciosa).
+    // Solucao: increment atomico, sem leitura previa do saldo.
+    let variationSku: string
+    let productId: string
+    let productName: string
+    let stockAfter: number
+    let entry: { id: string; variationId: string; quantity: number; unitCostCents: number | null; notes: string | null; receivedAt: string; createdAt: string }
+    let movement: { id: string }
 
-    if (!variation) {
-      return NextResponse.json<ApiError>(
-        { error: 'Variação não encontrada', code: 'NOT_FOUND' },
-        { status: 404 }
-      )
+    try {
+      ;({ entry, movement, variationSku, productId, productName, stockAfter } =
+        await prisma.$transaction(async (tx) => {
+          const variation = await tx.productVariation.findUnique({
+            where: { id: variationId as string },
+            select: {
+              id: true,
+              sku: true,
+              isActive: true,
+              product: { select: { id: true, name: true } },
+            },
+          })
+
+          if (!variation) {
+            throw Object.assign(new Error('NOT_FOUND'), { code: 'NOT_FOUND' })
+          }
+          if (!variation.isActive) {
+            throw Object.assign(new Error('VARIATION_INACTIVE'), { code: 'VARIATION_INACTIVE' })
+          }
+
+          const entry = await tx.stockEntry.create({
+            data: {
+              variationId: variationId as string,
+              quantity: quantity as number,
+              unitCostCents: (unitCostCents as number | null | undefined) ?? null,
+              notes: (notes as string | null | undefined) ?? null,
+              ...(receivedAt ? { receivedAt: receivedAt as string } : {}),
+            },
+          })
+
+          // QA-031: increment atomico — sem read-then-write, sem race condition
+          await tx.productVariation.update({
+            where: { id: variationId as string },
+            data: { stockQuantity: { increment: quantity as number } },
+          })
+
+          // Ler saldo real pos-increment para balanceAfter (snapshot correto)
+          const updated = await tx.productVariation.findUnique({
+            where: { id: variationId as string },
+            select: { stockQuantity: true },
+          })
+          const stockAfter = updated?.stockQuantity ?? 0
+
+          const movement = await tx.stockMovement.create({
+            data: {
+              variationId: variationId as string,
+              stockEntryId: entry.id,
+              type: MOVEMENT_TYPE.ENTRY,
+              quantity: quantity as number,
+              balanceAfter: stockAfter,
+              notes: (notes as string | null | undefined) ?? null,
+            },
+          })
+
+          return {
+            entry,
+            movement,
+            variationSku: variation.sku,
+            productId: variation.product.id,
+            productName: variation.product.name,
+            stockAfter,
+          }
+        }))
+    } catch (txError) {
+      const err = txError as Error & { code?: string }
+      if (err.code === 'NOT_FOUND') {
+        return NextResponse.json<ApiError>(
+          { error: 'Variação não encontrada', code: 'NOT_FOUND' },
+          { status: 404 }
+        )
+      }
+      if (err.code === 'VARIATION_INACTIVE') {
+        return NextResponse.json<ApiError>(
+          { error: 'Variação inativa — não é possível dar entrada', code: 'VARIATION_INACTIVE' },
+          { status: 422 }
+        )
+      }
+      throw txError
     }
-
-    if (!variation.isActive) {
-      return NextResponse.json<ApiError>(
-        { error: 'Variação inativa — não é possível dar entrada', code: 'VARIATION_INACTIVE' },
-        { status: 422 }
-      )
-    }
-
-    const newStock = variation.stockQuantity + (quantity as number)
-
-    // Transaction: StockEntry + StockMovement + update stockQuantity
-    const { entry, movement } = await prisma.$transaction(async (tx) => {
-      const entry = await tx.stockEntry.create({
-        data: {
-          variationId: variationId as string,
-          quantity: quantity as number,
-          unitCostCents: (unitCostCents as number | null | undefined) ?? null,
-          notes: (notes as string | null | undefined) ?? null,
-          ...(receivedAt ? { receivedAt: receivedAt as string } : {}),
-        },
-      })
-
-      const movement = await tx.stockMovement.create({
-        data: {
-          variationId: variationId as string,
-          stockEntryId: entry.id,
-          type: MOVEMENT_TYPE.ENTRY,
-          quantity: quantity as number, // positivo = entrada
-          balanceAfter: newStock,
-          notes: (notes as string | null | undefined) ?? null,
-        },
-      })
-
-      await tx.productVariation.update({
-        where: { id: variationId as string },
-        data: { stockQuantity: newStock },
-      })
-
-      return { entry, movement }
-    })
 
     const responseData: StockEntryResponse = {
       id: entry.id,
       variationId: entry.variationId,
-      variationSku: variation.sku,
-      productId: variation.product.id,
-      productName: variation.product.name,
+      variationSku,
+      productId,
+      productName,
       quantity: entry.quantity,
       unitCostCents: entry.unitCostCents,
       notes: entry.notes,
       receivedAt: entry.receivedAt,
       createdAt: entry.createdAt,
-      stockAfter: newStock,
+      stockAfter,
       movementId: movement.id,
     }
 

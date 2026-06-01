@@ -7,10 +7,12 @@
 //
 // 'use client': necessário pois usa usePathname() para destacar item ativo.
 // Lucide React icons — zero emojis.
+// shopName: carregado de GET /api/settings para refletir o nome configurado pela dona.
 // =============================================================================
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import {
   LayoutDashboard,
   Package,
@@ -20,6 +22,7 @@ import {
   Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { ApiSuccess, SettingsResponse } from '@/types'
 
 const NAV_ITEMS = [
   { href: '/',              label: 'Painel',        icon: LayoutDashboard },
@@ -63,6 +66,19 @@ function NavItem({
 
 export function SidebarContent() {
   const pathname = usePathname()
+  const [shopName, setShopName] = useState('Pimenta Ousada')
+
+  // Carregar nome da loja de /api/settings (público — sem PIN necessário)
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then((json: ApiSuccess<SettingsResponse>) => {
+        if ('data' in json && json.data.shopName) {
+          setShopName(json.data.shopName)
+        }
+      })
+      .catch(() => { /* mantém o fallback */ })
+  }, [])
 
   const navItemsWithActive = NAV_ITEMS.map(item => ({
     href: item.href,
@@ -83,7 +99,7 @@ export function SidebarContent() {
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground leading-none">
-              Pimenta Ousada
+              {shopName}
             </p>
             <p className="text-[10px] text-muted-foreground mt-0.5">Gestão de Estoque</p>
           </div>
