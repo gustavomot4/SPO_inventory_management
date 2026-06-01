@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
-import { cn, parseCurrencyToCents } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import type {
   ProductListItem,
   ProductResponse,
@@ -197,7 +197,6 @@ interface EntradaFormErrors {
   productId?: string
   variationId?: string
   quantity?: string
-  unitCostCents?: string
   general?: string
 }
 
@@ -221,7 +220,6 @@ function NovaEntradaTab() {
 
   // Campos do formulário
   const [quantity, setQuantity] = useState('')
-  const [costInput, setCostInput] = useState('')
   const [notes, setNotes] = useState('')
   const [receivedAt, setReceivedAt] = useState('')
 
@@ -292,14 +290,6 @@ function NovaEntradaTab() {
     if (!variationId) errs.variationId = 'Selecione uma variação'
     const qty = parseInt(quantity, 10)
     if (!quantity || isNaN(qty) || qty <= 0) errs.quantity = 'Quantidade deve ser inteiro > 0'
-    if (costInput.trim()) {
-      try {
-        const c = parseCurrencyToCents(costInput)
-        if (c < 0) errs.unitCostCents = 'Custo deve ser ≥ 0'
-      } catch {
-        errs.unitCostCents = 'Custo inválido (ex: 25,90)'
-      }
-    }
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -312,9 +302,6 @@ function NovaEntradaTab() {
     const payload: Record<string, unknown> = {
       variationId,
       quantity: parseInt(quantity, 10),
-    }
-    if (costInput.trim()) {
-      try { payload.unitCostCents = parseCurrencyToCents(costInput) } catch { /* validated */ }
     }
     if (notes.trim()) payload.notes = notes.trim()
     if (receivedAt) payload.receivedAt = new Date(receivedAt).toISOString()
@@ -345,7 +332,6 @@ function NovaEntradaTab() {
         })
         // Limpar campos mas manter produto/variação
         setQuantity('')
-        setCostInput('')
         setNotes('')
         setReceivedAt('')
         setErrors({})

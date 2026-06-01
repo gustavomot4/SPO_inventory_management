@@ -23,6 +23,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const includeInactive = searchParams.get('includeInactive') === 'true'
 
     const categories = await prisma.category.findMany({
+      take: 200, // QA-047: limite de segurança — design pressupõe < 20 categorias por loja
       where: includeInactive ? undefined : { isActive: true },
       orderBy: { name: 'asc' },
     })

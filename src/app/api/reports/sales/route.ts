@@ -30,6 +30,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const dateFrom = searchParams.get('dateFrom') || undefined
     const dateTo = searchParams.get('dateTo') || undefined
 
+    // QA-036: validar formato YYYY-MM-DD
+    const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
+    if (dateFrom && !DATE_REGEX.test(dateFrom)) {
+      return NextResponse.json<ApiError>(
+        { error: 'O parâmetro "dateFrom" deve estar no formato YYYY-MM-DD (ex: 2026-01-01)', code: 'INVALID_PARAM' },
+        { status: 400 }
+      )
+    }
+    if (dateTo && !DATE_REGEX.test(dateTo)) {
+      return NextResponse.json<ApiError>(
+        { error: 'O parâmetro "dateTo" deve estar no formato YYYY-MM-DD (ex: 2026-12-31)', code: 'INVALID_PARAM' },
+        { status: 400 }
+      )
+    }
+
     const now = new Date()
     const todayEnd = now.toISOString().slice(0, 10) + 'T23:59:59.999Z'
     const thirtyDaysAgo =
@@ -39,7 +54,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const from = dateFrom ? dateFrom + 'T00:00:00.000Z' : thirtyDaysAgo
     const to   = dateTo   ? dateTo   + 'T23:59:59.999Z' : todayEnd
 
+    // QA-033: validar intervalo maximo de 366 dias
+    const diffDays = (new Date(to).getTime() - new Date(from).getTime()) / (1000 * 60 * 60 * 24)
+    if (diffDays > 366) {
+      return NextResponse.json<ApiError>(
+        { error: 'O período máximo permitido é de 12 meses. Refine o intervalo de datas.', code: 'DATE_RANGE_TOO_LARGE' },
+        { status: 400 }
+      )
+    }
+
     const sales = await prisma.sale.findMany({
+      take: 5000, // QA-033: limite de seguranca — evita carregar todo o historico em memoria
       where: { createdAt: { gte: from, lte: to } },
       include: {
         items: {

@@ -132,6 +132,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
+    // QA-043: limite de tamanho em campos de texto livre
+    if (notes !== undefined && notes !== null) {
+      if (typeof notes !== 'string' || notes.length > 500) {
+        return NextResponse.json<ApiError>(
+          { error: 'O campo "notes" deve ter no máximo 500 caracteres', code: 'INVALID_NOTES' }, { status: 400 }
+        )
+      }
+    }
+
     type CardMachineRecord = { id: string; name: string; feeBasisPoints: number; isActive: boolean }
     let cardMachine: CardMachineRecord | null = null
     if (cardMachineId) {
@@ -327,6 +336,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const dateFrom = searchParams.get('dateFrom') || undefined
     const dateTo = searchParams.get('dateTo') || undefined
     const cursor = searchParams.get('cursor') || undefined
+
+    // QA-036: validar formato YYYY-MM-DD
+    const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
+    if (dateFrom && !DATE_REGEX.test(dateFrom)) {
+      return NextResponse.json<ApiError>(
+        { error: 'O parâmetro "dateFrom" deve estar no formato YYYY-MM-DD', code: 'INVALID_PARAM' },
+        { status: 400 }
+      )
+    }
+    if (dateTo && !DATE_REGEX.test(dateTo)) {
+      return NextResponse.json<ApiError>(
+        { error: 'O parâmetro "dateTo" deve estar no formato YYYY-MM-DD', code: 'INVALID_PARAM' },
+        { status: 400 }
+      )
+    }
     const pageSizeParam = parseInt(searchParams.get('pageSize') || '20', 10)
     const pageSize = Math.min(Math.max(1, isNaN(pageSizeParam) ? 20 : pageSizeParam), 100)
     const code = searchParams.get('code')?.trim().toLowerCase() || undefined

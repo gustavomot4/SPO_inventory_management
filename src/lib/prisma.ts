@@ -1,8 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 
-// Singleton do PrismaClient — evita múltiplas conexões em dev (hot reload)
-// Ref: https://www.prisma.io/docs/guides/other/troubleshooting-orm/help-articles/nextjs-prisma-client-dev-practices
-
+// Singleton do PrismaClient — evita multiplas conexoes em dev (hot reload)
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
@@ -20,11 +18,17 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
 }
 
-// QA-002: PRAGMA foreign_keys = ON — SQLite desativa FKs por padrão, Prisma não ativa.
-// QA-011: WAL mode = leituras não bloqueiam escritas (múltiplas abas abertas).
+// QA-002: PRAGMA foreign_keys = ON — SQLite desativa FKs por padrao, Prisma nao ativa.
+// QA-011: WAL mode = leituras nao bloqueiam escritas (multiplas abas abertas).
 //         busy_timeout = aguarda lock em vez de retornar SQLITE_BUSY imediatamente.
+// QA-037: falhas de PRAGMA sao logadas — silenciar era perigoso (FKs desativadas sem aviso).
+// QA-038: usar $executeRaw (template literal) em vez de $executeRawUnsafe com strings.
 if (process.env.DATABASE_URL) {
-  prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON').catch(() => {})
-  prisma.$executeRawUnsafe('PRAGMA journal_mode = WAL').catch(() => {})
-  prisma.$executeRawUnsafe('PRAGMA busy_timeout = 5000').catch(() => {})
+  Promise.all([
+    prisma.$executeRaw`PRAGMA foreign_keys = ON`,
+    prisma.$executeRaw`PRAGMA journal_mode = WAL`,
+    prisma.$executeRaw`PRAGMA busy_timeout = 5000`,
+  ]).catch((err) => {
+    console.error('[SPO] Falha ao configurar PRAGMAs do SQLite — integridade do banco pode estar comprometida:', err)
+  })
 }
