@@ -8,19 +8,12 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Banco de dados persistido fora do container
-      # Os dados sobrevivem a restarts e atualizacoes do container
       - spo_data:/data
     environment:
-      # Banco em /data (volume persistente)
       DATABASE_URL: "file:/data/spo.db"
-      # Gerar com: openssl rand -base64 32
-      # Ou deixar como esta para MVP local (trocar antes de expor na internet)
       SESSION_SECRET: "spo-pimenta-ousada-local-secret-trocar-em-producao"
       NODE_ENV: "production"
       PORT: "3000"
-      # CRITICO: Next.js standalone escuta em localhost por padrao (127.0.0.1)
-      # Sem isso o Docker nao consegue redirecionar a porta para o host
       HOSTNAME: "0.0.0.0"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health 2>/dev/null || wget -qO- http://localhost:3000 2>/dev/null || exit 1"]
@@ -28,6 +21,29 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
+
+  spo-backup:
+    image: alpine:3.19
+    container_name: spo-backup
+    restart: unless-stopped
+    volumes:
+      # Banco — somente leitura (nunca interfere com o sistema principal)
+      - spo_data:/data:ro
+      # Pasta de backups na maquina da cliente
+      - ./backups:/backups
+      # Script de backup
+      - ./docker-backup.sh:/backup.sh:ro
+    command: >
+      sh -c "
+        sed -i 's/\r//' /backup.sh &&
+        chmod +x /backup.sh &&
+        mkdir -p /backups &&
+        echo '50 17 * * * /backup.sh >> /var/log/backup.log 2>&1' > /etc/crontabs/root &&
+        echo '[SPO Backup] Agendado para as 17h50 diariamente.' &&
+        echo '[SPO Backup] Rodando backup de inicializacao...' &&
+        /backup.sh &&
+        crond -f -l 8
+      "
 
 volumes:
   spo_data:

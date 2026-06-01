@@ -25,6 +25,9 @@ build/
 *.db-wal
 *.db-shm
 
+# Backups automaticos — ficam apenas na maquina local, nunca no repositorio
+backups/
+
 # Prisma
 prisma/migrations/dev/
 

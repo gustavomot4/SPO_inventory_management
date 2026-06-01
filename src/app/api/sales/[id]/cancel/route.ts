@@ -3,10 +3,13 @@
 // SPO — Sistema Pimenta Ousada | VEND-003
 // =============================================================================
 //
-// Acesso: Público.
+// Acesso: Protegido por PIN (middleware cobre /api/sales/:id/cancel) — QA-008
 //
 // Só pode cancelar vendas com status = 'ACTIVE'.
 // Reverte estoque via StockMovement com type = CANCELLATION (quantity positivo).
+//
+// QA-004: verificação de status movida para DENTRO da transaction com updateMany
+// condicional — evita race condition que duplicava reversão de estoque.
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -48,23 +51,16 @@ export async function POST(
   { params }: RouteContext
 ): Promise<NextResponse> {
   try {
-    // Verificar que venda existe
+    // Verificar existência antes da tx (early return rápido para NOT_FOUND)
     const existing = await prisma.sale.findUnique({
       where: { id: params.id },
-      select: { id: true, status: true },
+      select: { id: true },
     })
 
     if (!existing) {
       return NextResponse.json<ApiError>(
         { error: 'Venda não encontrada', code: 'NOT_FOUND' },
         { status: 404 }
-      )
-    }
-
-    if (existing.status === SALE_STATUS.CANCELLED) {
-      return NextResponse.json<ApiError>(
-        { error: 'Venda já foi cancelada', code: 'ALREADY_CANCELLED' },
-        { status: 422 }
       )
     }
 
@@ -80,7 +76,26 @@ export async function POST(
 
     // Executar cancelamento em $transaction
     const updatedSale = await prisma.$transaction(async (tx) => {
-      // 1. Buscar venda com items (dentro da tx para consistência)
+      // QA-004: atualizar status com condição atômica — evita race condition
+      // Se dois cancelamentos chegarem ao mesmo tempo, apenas um vai ter count > 0
+      const markCancelled = await tx.sale.updateMany({
+        where: {
+          id: params.id,
+          status: SALE_STATUS.ACTIVE, // condição: só atualiza se ainda ACTIVE
+        },
+        data: {
+          status: SALE_STATUS.CANCELLED,
+          cancelledAt: new Date().toISOString(),
+          cancelReason,
+        },
+      })
+
+      if (markCancelled.count === 0) {
+        // Venda já foi cancelada por outro request simultâneo
+        throw Object.assign(new Error('ALREADY_CANCELLED'), { code: 'ALREADY_CANCELLED' })
+      }
+
+      // 1. Buscar venda com items para reverter estoque
       const sale = await tx.sale.findUnique({
         where: { id: params.id },
         include: { items: true },
@@ -115,14 +130,9 @@ export async function POST(
         })
       }
 
-      // 3. Atualizar Sale para CANCELLED
-      const cancelled = await tx.sale.update({
+      // 3. Retornar venda atualizada com todos os dados para o response
+      const cancelled = await tx.sale.findUnique({
         where: { id: params.id },
-        data: {
-          status: SALE_STATUS.CANCELLED,
-          cancelledAt: new Date().toISOString(),
-          cancelReason,
-        },
         include: {
           cardMachine: { select: { name: true } },
           items: {
@@ -140,7 +150,7 @@ export async function POST(
         },
       })
 
-      return cancelled
+      return cancelled!
     })
 
     const responseData: SaleResponse = {
@@ -166,6 +176,12 @@ export async function POST(
 
     return NextResponse.json<ApiSuccess<SaleResponse>>({ data: responseData })
   } catch (error) {
+    if (error instanceof Error && (error as Error & { code?: string }).code === 'ALREADY_CANCELLED') {
+      return NextResponse.json<ApiError>(
+        { error: 'Venda já foi cancelada', code: 'ALREADY_CANCELLED' },
+        { status: 422 }
+      )
+    }
     console.error('[POST /api/sales/[id]/cancel]', error)
     return NextResponse.json<ApiError>(
       { error: 'Erro interno do servidor', code: 'INTERNAL_ERROR' },

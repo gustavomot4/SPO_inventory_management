@@ -55,6 +55,30 @@ docker compose up
 
 **Volume:** `spo-pimenta-ousada-data` montado em `/data` dentro do container. O banco persiste entre restarts e atualizações da imagem.
 
+**Serviço de backup:** `spo-backup` (Alpine 3.19) sobe junto com o sistema. Acessa o volume em modo read-only, nunca interfere com o sistema principal.
+
+---
+
+## Backup Automático
+
+O serviço `spo-backup` no `docker-compose.yml` gerencia backups automaticamente:
+
+- **Na inicialização** — backup imediato toda vez que `iniciar.bat` é executado
+- **Diariamente às 17h50** — cron interno do container (loja fecha às 18h)
+- **30 cópias mantidas** — o backup mais antigo é apagado quando o 31º é criado
+- **Localização** — pasta `backups/` na raiz do projeto (visível na máquina da cliente)
+- **Formato** — `spo_backup_YYYYMMDD_HHMMSS.db`
+
+```bash
+# Ver logs do serviço de backup
+docker logs spo-backup
+
+# Forçar backup manualmente
+docker exec spo-backup /backup.sh
+```
+
+> O backup só roda com o computador ligado. Se o PC estiver desligado às 17h50, o backup daquele dia é pulado — mas o backup da próxima inicialização o compensa.
+
 ---
 
 ## Variáveis de Ambiente

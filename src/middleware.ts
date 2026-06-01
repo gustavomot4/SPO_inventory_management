@@ -3,14 +3,16 @@
 // SPO — Sistema Pimenta Ousada
 // =============================================================================
 //
-// Rotas protegidas: /configuracoes, /relatorios
-// Rotas abertas: /, /produtos, /estoque, /vendas, /pin, /api/*
+// Rotas protegidas (requerem PIN):
+//   Páginas: /configuracoes, /relatorios
+//   APIs:    /api/settings (mutações), /api/reports, /api/card-machines,
+//            /api/categories (mutações), /api/sales/:id/cancel
 //
-// Fluxo:
-//   1. Usuário acessa rota protegida
-//   2. Middleware verifica cookie iron-session
-//   3. Se isPinVerified = true → acesso liberado
-//   4. Se não → redirect para /pin?redirect=<path>
+// Exceções públicas (sem PIN):
+//   GET /api/settings — leitura usada pela comanda e dashboard
+//
+// QA-003: card-machines e categories estavam sem proteção na API
+// QA-008: cancelamento de venda exige PIN (operação destrutiva)
 // =============================================================================
 
 import { getIronSession } from 'iron-session'
@@ -49,5 +51,8 @@ export const config = {
     '/relatorios/:path*',
     '/api/settings/:path*',
     '/api/reports/:path*',
+    '/api/card-machines/:path*',  // QA-003: maquininhas são área protegida (RN-007.4)
+    '/api/categories/:path*',     // QA-003: categorias são configuração protegida
+    '/api/sales/:id/cancel',      // QA-008: cancelamento é operação destrutiva
   ],
 }

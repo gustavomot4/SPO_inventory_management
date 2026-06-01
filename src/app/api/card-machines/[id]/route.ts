@@ -102,10 +102,11 @@ export async function PATCH(
       if (
         typeof feeBasisPoints !== 'number' ||
         !Number.isInteger(feeBasisPoints) ||
-        feeBasisPoints < 0
+        feeBasisPoints < 0 ||
+        feeBasisPoints > 5000  // QA-007: máx 50%
       ) {
         return NextResponse.json<ApiError>(
-          { error: 'A taxa deve ser um inteiro >= 0 (em basis points: 199 = 1,99%)', code: 'INVALID_FEE' },
+          { error: 'A taxa deve ser um inteiro entre 0 e 5000 basis points (máx 50%)', code: 'INVALID_FEE' },
           { status: 400 }
         )
       }

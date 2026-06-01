@@ -16,6 +16,9 @@ backups/
 .env.local
 .env.*.local
 
+# Arquivos placeholder de git — arquivo vazio quebra o BuildKit no Windows
+public/.gitkeep
+
 # Git
 .git
 .gitignore

@@ -35,7 +35,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     // Buscar variações com stockQuantity <= minStock, ativas, produto não deletado
+    // QA-009: limite de 2000 variações por consulta
     const variations = await prisma.productVariation.findMany({
+      take: 2000,
       where: {
         isActive: true,
         product: { deletedAt: null },

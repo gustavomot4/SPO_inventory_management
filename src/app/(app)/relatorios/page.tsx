@@ -562,14 +562,22 @@ function SalesTab() {
             <SummaryCard label="Canceladas" value={String(summary!.cancelledCount)} icon={XCircle} />
           </div>
 
-          {/* Cards de lucro */}
+          {/* Taxas + Lucro + Margem na mesma linha */}
           {summary!.estimatedProfitCents !== null ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
+              {summary!.totalFeeCents > 0 && (
+                <SummaryCard
+                  label="Taxas Pagas"
+                  value={formatCurrency(summary!.totalFeeCents)}
+                  icon={TrendingDown}
+                  hint="Descontado do lucro estimado"
+                />
+              )}
               <SummaryCard
                 label="Lucro Estimado"
                 value={formatCurrency(summary!.estimatedProfitCents ?? 0)}
                 icon={DollarSign}
-                hint="Receita liquida menos custo estimado"
+                hint="Receita menos custo e taxas"
               />
               <SummaryCard
                 label="Margem"

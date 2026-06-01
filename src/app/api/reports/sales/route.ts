@@ -84,8 +84,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const estimatedCostCents = hasAnyCostData ? totalEstimatedCostCents : null
+
+    // taxas de maquininha -- soma real gravada no momento da venda
+    const totalFeeCents = activeSales.reduce((sum, s) => sum + (s.feeCents ?? 0), 0)
+    const netRevenueCents = totalRevenue - totalFeeCents
+    const feePercentage =
+      totalFeeCents > 0 && totalRevenue > 0
+        ? Math.round((totalFeeCents / totalRevenue) * 1000) / 10
+        : null
+
+    // lucro = receita - custo dos produtos - taxas de maquininha
     const estimatedProfitCents =
-      estimatedCostCents !== null ? totalRevenue - estimatedCostCents : null
+      estimatedCostCents !== null ? totalRevenue - estimatedCostCents - totalFeeCents : null
     const estimatedMarginPct =
       estimatedProfitCents !== null && totalRevenue > 0
         ? Math.round((estimatedProfitCents / totalRevenue) * 100)
@@ -101,6 +111,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       estimatedCostCents,
       estimatedProfitCents,
       estimatedMarginPct,
+      totalFeeCents,
+      netRevenueCents,
+      feePercentage,
     }
 
     // byPaymentMethod (apenas vendas ativas)
