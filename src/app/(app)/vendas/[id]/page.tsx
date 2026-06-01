@@ -100,6 +100,10 @@ function Comanda({ sale, settings }: { sale: SaleResponse; settings: SettingsRes
         <p>Obrigada pela preferencia!</p>
         <p>Volte sempre!</p>
       </div>
+      <p className="border-t border-dashed border-gray-400 my-2" />
+      <div className="text-center">
+        <p className="font-bold">** DOCUMENTO NAO FISCAL **</p>
+      </div>
     </div>
   )
 }
@@ -112,10 +116,12 @@ function CancelModal({
   onConfirm,
   onClose,
   loading,
+  errorMsg,
 }: {
   onConfirm: (reason: string) => void
   onClose: () => void
   loading: boolean
+  errorMsg?: string | null
 }) {
   const [reason, setReason] = useState('')
 
@@ -144,6 +150,11 @@ function CancelModal({
             autoFocus
           />
         </div>
+        {errorMsg && (
+          <p className="mb-3 text-sm text-destructive rounded-lg bg-red-50 border border-destructive/20 px-3 py-2">
+            {errorMsg}
+          </p>
+        )}
         <div className="flex gap-2">
           <Button variant="destructive" loading={loading} onClick={() => onConfirm(reason)} className="flex-1">
             Sim, cancelar
@@ -171,6 +182,7 @@ export default function VendaDetalhePage() {
   const [notFound, setNotFound] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
   const loadSale = useCallback(async () => {
     // Carregar venda — falha aqui mostra "Venda não encontrada"
@@ -204,13 +216,20 @@ export default function VendaDetalhePage() {
       const res = await fetch(`/api/sales/${saleId}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: reason || undefined }),
+        body: JSON.stringify({ cancelReason: reason || undefined }),
       })
       const json: ApiResponse<SaleResponse> = await res.json()
+      if (!res.ok) {
+        const msg = 'error' in json ? (json as { error: string }).error : 'Erro ao cancelar venda'
+        setCancelError(msg)
+        return
+      }
       if ('data' in json) setSale(json.data)
-    } catch { /* noop */ } finally {
-      setCancelling(false)
       setShowCancelModal(false)
+    } catch {
+      setCancelError('Erro de conexão. Tente novamente.')
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -240,8 +259,9 @@ export default function VendaDetalhePage() {
       {showCancelModal && (
         <CancelModal
           onConfirm={handleCancel}
-          onClose={() => setShowCancelModal(false)}
+          onClose={() => { setShowCancelModal(false); setCancelError(null) }}
           loading={cancelling}
+          errorMsg={cancelError}
         />
       )}
 

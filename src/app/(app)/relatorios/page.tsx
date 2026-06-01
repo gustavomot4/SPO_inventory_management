@@ -179,8 +179,13 @@ function StockTab() {
     if (loaded) return
     setLoading(true)
     fetch('/api/reports/stock')
-      .then(r => r.json())
-      .then((j: ApiSuccess<StockReportItem[]> & { meta?: StockReportMeta }) => {
+      .then(r => {
+        // QA-024: PIN expirou (8h) → redirecionar para /pin
+        if (r.status === 401) { window.location.href = '/pin?redirect=/relatorios'; return null }
+        return r.json()
+      })
+      .then((j: (ApiSuccess<StockReportItem[]> & { meta?: StockReportMeta }) | null) => {
+        if (!j) return
         if ('data' in j) {
           setItems(j.data)
           if (j.meta) setMeta(j.meta as StockReportMeta)
@@ -474,8 +479,13 @@ function SalesTab() {
     if (!dateFrom || !dateTo) return
     setLoading(true)
     fetch('/api/reports/sales?dateFrom=' + dateFrom + '&dateTo=' + dateTo)
-      .then(r => r.json())
-      .then((j: ApiSuccess<SalesReportData>) => {
+      .then(r => {
+        // QA-024: PIN expirou → redirecionar para /pin
+        if (r.status === 401) { window.location.href = '/pin?redirect=/relatorios'; return null }
+        return r.json()
+      })
+      .then((j: ApiSuccess<SalesReportData> | null) => {
+        if (!j) return
         if ('data' in j) setData(j.data)
       })
       .catch(() => {})
@@ -764,7 +774,7 @@ export default function RelatoriosPage() {
           onClick={() => setActiveTab('sales')}
           className={cn(
             'rounded-lg px-4 py-1.5 text-sm font-medium transition-all',
-            activeTab === 'sales'
+                     activeTab === 'sales'
               ? 'bg-white text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
           )}
@@ -773,8 +783,9 @@ export default function RelatoriosPage() {
         </button>
       </div>
 
-      {activeTab === 'stock' && <StockTab />}
-      {activeTab === 'sales' && <SalesTab />}
+      {/* Conteúdo da aba */}
+      {activeTab === 'stock' ? <StockTab /> : <SalesTab />}
+
     </div>
   )
 }

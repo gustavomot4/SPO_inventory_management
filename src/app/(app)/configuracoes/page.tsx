@@ -933,7 +933,7 @@ export default function ConfiguracoesPage() {
               label="PIN atual"
               type="password"
               inputMode="numeric"
-              maxLength={8}
+              maxLength={4}
               value={currentPin}
               onChange={e => { setCurrentPin(e.target.value.replace(/\D/g, '')); setPinError(null) }}
               placeholder="Digite o PIN atual"
@@ -953,7 +953,7 @@ export default function ConfiguracoesPage() {
               label="Confirmar novo PIN"
               type="password"
               inputMode="numeric"
-              maxLength={8}
+              maxLength={4}
               value={confirmPin}
               onChange={e => { setConfirmPin(e.target.value.replace(/\D/g, '')); setPinError(null) }}
               placeholder="Repita o novo PIN"

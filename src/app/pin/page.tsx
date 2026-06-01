@@ -29,6 +29,16 @@ function PinScreen() {
   const [loading, setLoading] = useState(false)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
+  // QA-025: redirecionar se sessão PIN já está ativa
+  useEffect(() => {
+    fetch('/api/auth/status')
+      .then(r => r.json())
+      .then((j: { authenticated: boolean }) => {
+        if (j.authenticated) window.location.href = redirectTo
+      })
+      .catch(() => {})
+  }, [redirectTo])
+
   // Foca no primeiro input ao montar
   useEffect(() => {
     inputRefs.current[0]?.focus()
@@ -165,7 +175,7 @@ function PinScreen() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-4">
-          Área protegida — somente pessoal autorizado
+                Área protegida — somente pessoal autorizado
         </p>
       </div>
     </div>
