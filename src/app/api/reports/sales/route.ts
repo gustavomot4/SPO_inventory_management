@@ -63,8 +63,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       )
     }
 
+    const SALES_REPORT_LIMIT = 5000
+
+    // QA-053: contar o total real de vendas no periodo ANTES de aplicar o limite.
+    // Sem isso, um periodo com mais de 5000 vendas era truncado silenciosamente
+    // (orderBy asc → mantinha as MAIS ANTIGAS), subestimando receita/lucro sem
+    // nenhum aviso. Agora detectamos o truncamento e sinalizamos ao usuario.
+    const totalSalesInPeriod = await prisma.sale.count({
+      where: { createdAt: { gte: from, lte: to } },
+    })
+    const truncated = totalSalesInPeriod > SALES_REPORT_LIMIT
+
     const sales = await prisma.sale.findMany({
-      take: 5000, // QA-033: limite de seguranca — evita carregar todo o historico em memoria
+      take: SALES_REPORT_LIMIT, // QA-033: limite de seguranca — evita carregar todo o historico em memoria
       where: { createdAt: { gte: from, lte: to } },
       include: {
         items: {
@@ -139,6 +150,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalFeeCents,
       netRevenueCents,
       feePercentage,
+      truncated,
+      totalSalesInPeriod,
     }
 
     // byPaymentMethod (apenas vendas ativas)

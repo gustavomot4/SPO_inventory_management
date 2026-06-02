@@ -33,6 +33,21 @@
 /* Reset básico */
 * { box-sizing: border-box; }
 
+/* =============================================================================
+   QA-056: iOS Safari aplica zoom automático ao focar inputs com font-size < 16px.
+   Em telas de toque (PDV em tablet/celular), os campos usam text-sm (14px), o que
+   provoca um "pulo" de zoom ao tocar — atrapalhando o registro de vendas.
+   Forçamos 16px apenas em dispositivos de ponteiro grosseiro (toque), preservando
+   a aparência em desktop (mouse).
+   ============================================================================= */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 body {
   color: rgb(var(--foreground));
   background: rgb(var(--background));

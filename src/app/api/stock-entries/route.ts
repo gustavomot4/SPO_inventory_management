@@ -249,7 +249,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       take: pageSize + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       where: variationFilter,
-      orderBy: { receivedAt: 'desc' },
+      // QA-054: receivedAt não é único (entradas no mesmo instante) → desempate por id
+      // para estabilizar a paginação por cursor (cursor: { id }).
+      orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }],
       include: {
         variation: {
           select: {

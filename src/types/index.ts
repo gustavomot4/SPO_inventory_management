@@ -296,6 +296,10 @@ export type SalesReportSummary = {
   totalFeeCents: number
   netRevenueCents: number         // receita - taxas
   feePercentage: number | null    // % medio de taxa sobre receita (null se sem taxa)
+  // QA-053: indica que o periodo excedeu o limite de 5000 vendas e o relatorio
+  // foi calculado apenas sobre uma amostra (totais subestimados).
+  truncated: boolean
+  totalSalesInPeriod: number      // total real de vendas no periodo (antes do limite)
 }
 
 export type SalesByPaymentMethod = {

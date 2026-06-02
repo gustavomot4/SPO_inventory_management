@@ -624,6 +624,14 @@ function SalesTab() {
 
       {!loading && data && (
         <div className="space-y-8">
+          {/* QA-053: aviso de truncamento — relatorio calculado sobre amostra parcial */}
+          {summary!.truncated && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" role="alert">
+              Este periodo tem {summary!.totalSalesInPeriod.toLocaleString('pt-BR')} vendas, acima do limite de 5.000.
+              Os totais abaixo consideram apenas parte das vendas e estao subestimados.
+              Reduza o intervalo de datas para ver numeros completos.
+            </div>
+          )}
           {/* Cards principais */}
           <div className="grid grid-cols-3 gap-3">
             <SummaryCard label="Vendas" value={String(summary!.totalSales)} icon={ShoppingBag} />

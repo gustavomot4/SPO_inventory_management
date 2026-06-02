@@ -368,7 +368,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
         ...(code ? { id: { startsWith: code } } : {}),
       },
-      orderBy: { createdAt: 'desc' },
+      // QA-054: orderBy determinístico — createdAt sozinho não é único (várias vendas
+      // podem ter o mesmo timestamp num PDV movimentado). Sem um critério de desempate
+      // único, a paginação por cursor (cursor: { id }) pode pular ou duplicar registros
+      // na fronteira de página ("Carregar mais"). Adicionar id como desempate torna a
+      // ordenação total e a paginação estável.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         cardMachine: { select: { name: true } },
         _count: { select: { items: true } },
