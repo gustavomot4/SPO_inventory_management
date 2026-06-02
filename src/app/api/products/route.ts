@@ -88,7 +88,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ...(isActiveFilter !== undefined ? { isActive: isActiveFilter } : {}),
         ...(includeDeleted ? {} : { deletedAt: null }),
       },
-      orderBy: { name: 'asc' },
+      // QA-054: name não é único (produtos podem ter o mesmo nome) → desempate por id
+      // para que a paginação por cursor (cursor: { id }) seja estável.
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
       include: {
         category: { select: { name: true } },
         variations: {

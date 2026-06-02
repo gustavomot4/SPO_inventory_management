@@ -228,6 +228,11 @@ export default function NovaVendaPage() {
 
       if (!res.ok) {
         const code = 'code' in json ? (json as { code?: string }).code : undefined
+        // QA-051: sessao expirada — redirecionar para reautenticar
+        if (code === 'UNAUTHORIZED') {
+          window.location.href = '/pin?redirect=/vendas/nova'
+          return
+        }
         if (code === 'INSUFFICIENT_STOCK' && 'details' in json) {
           const details = (json as { details?: unknown }).details
           setSubmitError(

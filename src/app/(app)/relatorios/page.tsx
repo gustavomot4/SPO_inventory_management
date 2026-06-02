@@ -173,25 +173,32 @@ function StockTab() {
   const [meta, setMeta] = useState<StockReportMeta | null>(null)
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
   useEffect(() => {
     if (loaded) return
     setLoading(true)
+    setErrorMsg(null)
     fetch('/api/reports/stock')
       .then(r => {
         // QA-024: PIN expirou (8h) → redirecionar para /pin
         if (r.status === 401) { window.location.href = '/pin?redirect=/relatorios'; return null }
-        return r.json()
+        return r.json().then((json: unknown) => ({ ok: r.ok, json }))
       })
-      .then((j: (ApiSuccess<StockReportItem[]> & { meta?: StockReportMeta }) | null) => {
-        if (!j) return
-        if ('data' in j) {
-          setItems(j.data)
-          if (j.meta) setMeta(j.meta as StockReportMeta)
+      .then((result: { ok: boolean; json: unknown } | null) => {
+        if (!result) return
+        const { ok, json } = result
+        // QA-044: tratar erros HTTP explicitamente em vez de silenciar
+        if (!ok || !('data' in (json as object))) {
+          setErrorMsg('Erro ao carregar relatório de estoque. Tente novamente.')
+          return
         }
+        const j = json as ApiSuccess<StockReportItem[]> & { meta?: StockReportMeta }
+        setItems(j.data)
+        if (j.meta) setMeta(j.meta as StockReportMeta)
       })
-      .catch(() => {})
+      .catch(() => setErrorMsg('Erro de conexão. Verifique a rede e tente novamente.'))
       .finally(() => {
         setLoading(false)
         setLoaded(true)
@@ -222,8 +229,30 @@ function StockTab() {
     )
   }
 
+  if (errorMsg) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+        <XCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
+        <p className="text-sm font-medium text-foreground">{errorMsg}</p>
+        <button
+          type="button"
+          onClick={() => setLoaded(false)}
+          className="text-xs text-brand-600 underline underline-offset-2"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
+      {/* QA-052: aviso de truncamento se o limite de 2000 variações for atingido */}
+      {items.length >= 2000 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          Exibindo os primeiros 2.000 resultados. Filtre por categoria para ver todos os itens.
+        </div>
+      )}
       {meta && (
         <>
           {/* Cards de status */}
@@ -471,6 +500,7 @@ const PERIOD_LABELS: Record<PeriodFilter, string> = {
 function SalesTab() {
   const [data, setData] = useState<SalesReportData | null>(null)
   const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [period, setPeriod] = useState<PeriodFilter>('month')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -478,17 +508,31 @@ function SalesTab() {
   const loadSales = useCallback((dateFrom: string, dateTo: string) => {
     if (!dateFrom || !dateTo) return
     setLoading(true)
+    setErrorMsg(null)
+    setData(null)
     fetch('/api/reports/sales?dateFrom=' + dateFrom + '&dateTo=' + dateTo)
       .then(r => {
         // QA-024: PIN expirou → redirecionar para /pin
         if (r.status === 401) { window.location.href = '/pin?redirect=/relatorios'; return null }
-        return r.json()
+        return r.json().then((json: unknown) => ({ ok: r.ok, json }))
       })
-      .then((j: ApiSuccess<SalesReportData> | null) => {
-        if (!j) return
-        if ('data' in j) setData(j.data)
+      .then((result: { ok: boolean; json: unknown } | null) => {
+        if (!result) return
+        const { ok, json } = result
+        // QA-044: tratar erros HTTP explicitamente — inclui 400 DATE_RANGE_TOO_LARGE (fix QA-033)
+        if (!ok) {
+          const code = (json as { code?: string })?.code
+          const msg = code === 'DATE_RANGE_TOO_LARGE'
+            ? 'Período muito longo. O máximo permitido é 12 meses.'
+            : 'error' in (json as object)
+            ? (json as { error: string }).error
+            : 'Erro ao carregar relatório. Tente novamente.'
+          setErrorMsg(msg)
+          return
+        }
+        if ('data' in (json as object)) setData((json as ApiSuccess<SalesReportData>).data)
       })
-      .catch(() => {})
+      .catch(() => setErrorMsg('Erro de conexão. Verifique a rede e tente novamente.'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -551,6 +595,21 @@ function SalesTab() {
         )}
       </div>
 
+      {/* QA-044: banner de erro explicito em vez de tela vazia */}
+      {!loading && errorMsg && (
+        <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+          <XCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
+          <p className="text-sm font-medium text-foreground">{errorMsg}</p>
+          <button
+            type="button"
+            onClick={() => { const range = period !== 'custom' ? getDateRange(period) : { dateFrom: customFrom, dateTo: customTo }; if (range.dateFrom && range.dateTo) loadSales(range.dateFrom, range.dateTo) }}
+            className="text-xs text-brand-600 underline underline-offset-2"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
       {loading && (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
@@ -565,6 +624,14 @@ function SalesTab() {
 
       {!loading && data && (
         <div className="space-y-8">
+          {/* QA-053: aviso de truncamento — relatorio calculado sobre amostra parcial */}
+          {summary!.truncated && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" role="alert">
+              Este periodo tem {summary!.totalSalesInPeriod.toLocaleString('pt-BR')} vendas, acima do limite de 5.000.
+              Os totais abaixo consideram apenas parte das vendas e estao subestimados.
+              Reduza o intervalo de datas para ver numeros completos.
+            </div>
+          )}
           {/* Cards principais */}
           <div className="grid grid-cols-3 gap-3">
             <SummaryCard label="Vendas" value={String(summary!.totalSales)} icon={ShoppingBag} />

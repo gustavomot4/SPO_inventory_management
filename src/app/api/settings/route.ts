@@ -6,6 +6,10 @@
 //
 // pinHash NUNCA e retornado em nenhuma resposta deste endpoint.
 // O PIN e gerenciado exclusivamente via /api/auth/pin.
+//
+// QA-040: findFirst + create — race condition de primeira criacao e LOW e aceita.
+//         O upsert com ID fixo (tentativa anterior) criava registro duplicado em
+//         bancos existentes (QA-048), potencialmente bypassando autenticacao PIN.
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -15,21 +19,17 @@ import type { ApiSuccess, ApiError, SettingsResponse } from '@/types'
 // ---------------------------------------------------------------------------
 // GET /api/settings
 // Acesso: Publico (comanda precisa sem autenticacao)
-// Cria o singleton com valores padrao se nao existir.
 // ---------------------------------------------------------------------------
-
-// ID fixo do singleton — garante que upsert nunca cria duplicatas (QA-040)
-const SETTINGS_SINGLETON_ID = 'spo-settings-singleton'
 
 export async function GET(): Promise<NextResponse> {
   try {
-    // QA-040: upsert atomico — findFirst + create sem transacao criava registros
-    // duplicados se dois requests chegassem simultaneamente antes do 1o insert.
-    const settings = await prisma.settings.upsert({
-      where: { id: SETTINGS_SINGLETON_ID },
-      update: {},
-      create: { id: SETTINGS_SINGLETON_ID, shopName: 'Pimenta Ousada' },
-    })
+    let settings = await prisma.settings.findFirst()
+
+    if (!settings) {
+      settings = await prisma.settings.create({
+        data: { shopName: 'Pimenta Ousada' },
+      })
+    }
 
     return NextResponse.json<ApiSuccess<SettingsResponse>>({
       data: {
@@ -51,7 +51,7 @@ export async function GET(): Promise<NextResponse> {
 
 // ---------------------------------------------------------------------------
 // PATCH /api/settings
-// Acesso: Protegido por PIN (middleware.ts cobre /api/settings/* — ver config abaixo)
+// Acesso: Protegido por PIN (middleware.ts cobre /api/settings/*)
 // Body: { shopName?, address?, phone? } — pelo menos um obrigatorio
 // null = limpar campo (address e phone aceitam null)
 // ---------------------------------------------------------------------------
@@ -115,11 +115,18 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     if (address !== undefined) updateData.address = address as string | null
     if (phone !== undefined) updateData.phone = phone as string | null
 
-    // QA-040: upsert garante que o singleton existe antes de atualizar
-    const updated = await prisma.settings.upsert({
-      where: { id: SETTINGS_SINGLETON_ID },
-      update: updateData,
-      create: { id: SETTINGS_SINGLETON_ID, shopName: 'Pimenta Ousada', ...updateData },
+    // QA-048: usar findFirst + update por ID encontrado (compativel com dados existentes).
+    // O upsert com ID fixo criava registro duplicado em bancos com Settings pre-existente.
+    let existing = await prisma.settings.findFirst()
+    if (!existing) {
+      existing = await prisma.settings.create({
+        data: { shopName: 'Pimenta Ousada' },
+      })
+    }
+
+    const updated = await prisma.settings.update({
+      where: { id: existing.id },
+      data: updateData,
     })
 
     return NextResponse.json<ApiSuccess<SettingsResponse>>({

@@ -335,6 +335,8 @@ export default function ProdutoDetalhePage() {
 
       if (!res.ok) {
         const code = 'code' in json ? (json as { code?: string }).code : undefined
+        // QA-049: sessao expirada
+        if (code === 'UNAUTHORIZED') { window.location.href = '/pin?redirect=/produtos/' + productId; return }
         if (code === 'NAME_TAKEN') setFormErrors({ name: 'Já existe um produto com este nome' })
         else if (code === 'CATEGORY_NOT_FOUND') setFormErrors({ categoryId: 'Categoria não encontrada' })
         else setFormErrors({ general: 'error' in json ? json.error : 'Erro ao salvar' })
@@ -437,6 +439,8 @@ export default function ProdutoDetalhePage() {
     try {
       const res = await fetch(`/api/products/${productId}`, { method: 'DELETE' })
       if (!res.ok) {
+        // QA-049: sessao expirada
+        if (res.status === 401) { window.location.href = '/pin?redirect=/produtos/' + productId; return }
         const json = await res.json().catch(() => ({}))
         setDeleteError('error' in json ? (json as { error: string }).error : 'Erro ao inativar produto. Tente novamente.')
         setDeletingProduct(false)
@@ -461,6 +465,9 @@ export default function ProdutoDetalhePage() {
       })
       const json: ApiResponse<ProductResponse> = await res.json()
       if (!res.ok) {
+        const code = 'code' in json ? (json as { code?: string }).code : undefined
+        // QA-049: sessao expirada
+        if (code === 'UNAUTHORIZED') { window.location.href = '/pin?redirect=/produtos/' + productId; return }
         // QA-029: feedback de erro ao usuário
         setReactivateError('error' in json ? json.error : 'Erro ao reativar produto')
         return

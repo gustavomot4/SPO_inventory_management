@@ -13,6 +13,7 @@ import {
   CARD_PAYMENT_METHODS, PAYMENT_METHOD_LABELS,
 } from '@/lib/enums'
 import type { PaymentMethod } from '@/lib/enums'
+import { storeDayStartToUtc, storeDayEndToUtc } from '@/lib/timezone'
 import type { ApiSuccess, ApiError, SaleResponse, SaleListItem, SaleItemResponse } from '@/types'
 
 function formatSaleItem(item: {
@@ -355,9 +356,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const pageSize = Math.min(Math.max(1, isNaN(pageSizeParam) ? 20 : pageSizeParam), 100)
     const code = searchParams.get('code')?.trim().toLowerCase() || undefined
 
+    // QA-055: limites no fuso da loja (UTC−3) para que "Hoje" inclua as vendas
+    // do fim do expediente (após 21h BRT), que em UTC já pertencem ao dia seguinte.
     const dateFilter: Record<string, string> = {}
-    if (dateFrom) dateFilter['gte'] = dateFrom + 'T00:00:00.000Z'
-    if (dateTo) dateFilter['lte'] = dateTo + 'T23:59:59.999Z'
+    if (dateFrom) dateFilter['gte'] = storeDayStartToUtc(dateFrom)
+    if (dateTo) dateFilter['lte'] = storeDayEndToUtc(dateTo)
 
     const sales = await prisma.sale.findMany({
       take: pageSize + 1,
@@ -368,7 +371,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
         ...(code ? { id: { startsWith: code } } : {}),
       },
-      orderBy: { createdAt: 'desc' },
+      // QA-054: orderBy determinístico — createdAt sozinho não é único (várias vendas
+      // podem ter o mesmo timestamp num PDV movimentado). Sem um critério de desempate
+      // único, a paginação por cursor (cursor: { id }) pode pular ou duplicar registros
+      // na fronteira de página ("Carregar mais"). Adicionar id como desempate torna a
+      // ordenação total e a paginação estável.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         cardMachine: { select: { name: true } },
         _count: { select: { items: true } },

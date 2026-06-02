@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { SALE_STATUS, PAYMENT_METHOD_LABELS } from '@/lib/enums'
+import { storeDayStartToUtc, storeDayEndToUtc, utcToStoreDay, storeToday } from '@/lib/timezone'
 import type { PaymentMethod } from '@/lib/enums'
 import type {
   ApiSuccess,
@@ -45,14 +46,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       )
     }
 
-    const now = new Date()
-    const todayEnd = now.toISOString().slice(0, 10) + 'T23:59:59.999Z'
-    const thirtyDaysAgo =
-      new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) +
-      'T00:00:00.000Z'
+    // QA-055: limites calculados no fuso da loja (UTC−3). Antes, a data local era
+    // tratada como UTC, fazendo vendas após 21h (BRT) caírem no dia errado.
+    const today = storeToday() // YYYY-MM-DD no horário da loja
+    // Instante UTC da meia-noite (no fuso da loja) de hoje; 30 dias antes = padrão.
+    const todayStartMs = new Date(storeDayStartToUtc(today)).getTime()
 
-    const from = dateFrom ? dateFrom + 'T00:00:00.000Z' : thirtyDaysAgo
-    const to   = dateTo   ? dateTo   + 'T23:59:59.999Z' : todayEnd
+    const from = dateFrom
+      ? storeDayStartToUtc(dateFrom)
+      : new Date(todayStartMs - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const to = dateTo ? storeDayEndToUtc(dateTo) : storeDayEndToUtc(today)
 
     // QA-033: validar intervalo maximo de 366 dias
     const diffDays = (new Date(to).getTime() - new Date(from).getTime()) / (1000 * 60 * 60 * 24)
@@ -63,8 +66,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       )
     }
 
+    const SALES_REPORT_LIMIT = 5000
+
+    // QA-053: contar o total real de vendas no periodo ANTES de aplicar o limite.
+    // Sem isso, um periodo com mais de 5000 vendas era truncado silenciosamente
+    // (orderBy asc → mantinha as MAIS ANTIGAS), subestimando receita/lucro sem
+    // nenhum aviso. Agora detectamos o truncamento e sinalizamos ao usuario.
+    const totalSalesInPeriod = await prisma.sale.count({
+      where: { createdAt: { gte: from, lte: to } },
+    })
+    const truncated = totalSalesInPeriod > SALES_REPORT_LIMIT
+
     const sales = await prisma.sale.findMany({
-      take: 5000, // QA-033: limite de seguranca — evita carregar todo o historico em memoria
+      take: SALES_REPORT_LIMIT, // QA-033: limite de seguranca — evita carregar todo o historico em memoria
       where: { createdAt: { gte: from, lte: to } },
       include: {
         items: {
@@ -139,6 +153,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalFeeCents,
       netRevenueCents,
       feePercentage,
+      truncated,
+      totalSalesInPeriod,
     }
 
     // byPaymentMethod (apenas vendas ativas)
@@ -214,7 +230,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // byDay (apenas vendas ativas)
     const dayMap = new Map<string, { count: number; revenueCents: number }>()
     for (const sale of activeSales) {
-      const day = sale.createdAt.slice(0, 10)
+      // QA-055: agrupar pelo dia comercial da loja (UTC−3), não pelo dia UTC
+      const day = utcToStoreDay(sale.createdAt)
       const existing = dayMap.get(day) ?? { count: 0, revenueCents: 0 }
       dayMap.set(day, {
         count: existing.count + 1,

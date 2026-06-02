@@ -122,6 +122,8 @@ export default function VendasPage() {
     if (opts.cursorParam) params.set('cursor', opts.cursorParam)
 
     const res = await fetch(`/api/sales?${params}`)
+    // QA-049: PIN expirou — redirecionar em vez de lista vazia silenciosa
+    if (res.status === 401) { window.location.href = '/pin?redirect=/vendas'; return }
     const json: ApiSuccess<SaleListItem[]> = await res.json()
     if (!('data' in json)) return
 
@@ -136,7 +138,10 @@ export default function VendasPage() {
 
   useEffect(() => {
     setLoading(true)
-    fetchSales({ period, status: statusFilter, code: codeQuery || undefined }).finally(() => setLoading(false))
+    // QA-050: catch para falhas de rede
+    fetchSales({ period, status: statusFilter, code: codeQuery || undefined })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [period, statusFilter, codeQuery, fetchSales])
 
   async function handleLoadMore() {

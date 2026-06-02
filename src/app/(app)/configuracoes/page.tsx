@@ -116,9 +116,10 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
 
   async function handleSaveInstallment(id: string) {
     let bps = 0
-    try { bps = parseBasisPoints(editInstFee) } catch { return }
-    if (bps > 5000) { return }
+    try { bps = parseBasisPoints(editInstFee) } catch { setInstError('Taxa inválida (ex: 2,99)'); return }
+    if (bps > 5000) { setInstError('A taxa não pode ser maior que 50%'); return }
     setSavingInst(true)
+    setInstError(null)
     try {
       const res = await fetch(`/api/card-machines/${machine.id}/installments/${id}`, {
         method: 'PATCH',
@@ -126,18 +127,30 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
         body: JSON.stringify({ feeBasisPoints: bps }),
       })
       const json: ApiResponse<CardMachineInstallmentResponse> = await res.json()
+      // QA-042: verificar res.ok antes de fechar o editor
+      if (!res.ok) {
+        setInstError('error' in json ? json.error : 'Erro ao salvar taxa. Tente novamente.')
+        return
+      }
       if ('data' in json) setInstallments(p => p.map(i => i.id === id ? json.data : i))
       setEditingInstId(null)
-    } catch { /* noop */ } finally { setSavingInst(false) }
+    } catch { setInstError('Erro de conexão. Tente novamente.') } finally { setSavingInst(false) }
   }
 
   async function handleDeleteInstallment(id: string) {
     setDeletingInstId(id)
+    setInstError(null)
     try {
-      await fetch(`/api/card-machines/${machine.id}/installments/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/card-machines/${machine.id}/installments/${id}`, { method: 'DELETE' })
+      // QA-043: verificar res.ok antes de remover da UI
+      if (!res.ok) {
+        setInstError('Erro ao remover parcelamento. Tente novamente.')
+        setConfirmDeleteInstId(null)
+        return
+      }
       setInstallments(p => p.filter(i => i.id !== id))
       setConfirmDeleteInstId(null)
-    } catch { /* noop */ } finally { setDeletingInstId(null) }
+    } catch { setInstError('Erro de conexão. Tente novamente.') } finally { setDeletingInstId(null) }
   }
 
   // Opções de parcelas ainda não cadastradas (2-12)
@@ -663,7 +676,13 @@ export default function ConfiguracoesPage() {
   async function handleToggleActive(id: string, isActive: boolean) {
     try {
       if (isActive) {
-        await fetch(`/api/card-machines/${id}`, { method: 'DELETE' })
+        // QA-041: verificar res.ok antes de atualizar UI
+        const res = await fetch(`/api/card-machines/${id}`, { method: 'DELETE' })
+        if (!res.ok) {
+          // Falha silenciosa — recarregar para refletir estado real do banco
+          loadMachines()
+          return
+        }
         setMachines(prev => prev.map(m => m.id === id ? { ...m, isActive: false } : m))
       } else {
         const res = await fetch(`/api/card-machines/${id}`, {
@@ -672,6 +691,7 @@ export default function ConfiguracoesPage() {
           body: JSON.stringify({ isActive: true }),
         })
         const json: ApiResponse<CardMachineResponse> = await res.json()
+        if (!res.ok) { loadMachines(); return }
         if ('data' in json) setMachines(prev => prev.map(m => m.id === id ? json.data : m))
       }
     } catch { loadMachines() }
