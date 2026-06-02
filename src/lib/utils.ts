@@ -39,17 +39,39 @@ export function formatCurrency(cents: number): string {
  * Converte uma string de valor decimal para centavos (Int).
  * Aceita tanto ponto quanto vírgula como separador decimal.
  *
+ * Suporta o padrão brasileiro com separador de milhar:
  * @example
- * parseCurrencyToCents("59.90")  // → 5990
- * parseCurrencyToCents("59,90")  // → 5990
- * parseCurrencyToCents("100")    // → 10000
+ * parseCurrencyToCents("59.90")        // → 5990   (ponto decimal, legado)
+ * parseCurrencyToCents("59,90")        // → 5990   (vírgula decimal)
+ * parseCurrencyToCents("100")          // → 10000
+ * parseCurrencyToCents("1.299,90")     // → 129990 (milhar + decimal BR)
+ * parseCurrencyToCents("1.234.567,89") // → 123456789
+ * parseCurrencyToCents("R$ 49,90")     // → 4990   (ignora símbolo/espaços)
  *
  * @throws {Error} se o valor não for um número válido
  */
 export function parseCurrencyToCents(value: string): number {
-  // Normaliza vírgula para ponto (padrão brasileiro → ponto flutuante JS)
-  const normalized = value.trim().replace(',', '.')
-  const parsed = parseFloat(normalized)
+  // QA-057: o replace(',', '.') antigo só trocava a PRIMEIRA vírgula e não removia
+  // o separador de milhar. "1.299,90" virava "1.299.90" → parseFloat parava no 2º
+  // ponto → 1.299 → R$ 1,30 (erro de 1000×) em preços/descontos. Agora tratamos os
+  // separadores conforme o formato brasileiro.
+  let s = value.trim().replace(/[^\d.,-]/g, '') // mantém dígitos, ',', '.', '-'
+  const hasComma = s.includes(',')
+  const hasDot = s.includes('.')
+
+  if (hasComma && hasDot) {
+    // Formato BR completo: ponto = milhar, vírgula = decimal (ex.: "1.299,90")
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else if (hasComma) {
+    // Apenas vírgula = separador decimal BR (ex.: "59,90")
+    s = s.replace(',', '.')
+  } else if (hasDot) {
+    // Apenas ponto(s): mais de um ponto = separador de milhar ("1.234.567").
+    // Um único ponto é mantido como decimal ("59.90") por retrocompatibilidade.
+    if (((s.match(/\./g) || []).length) > 1) s = s.replace(/\./g, '')
+  }
+
+  const parsed = parseFloat(s)
 
   if (isNaN(parsed)) {
     throw new Error(`Valor inválido para conversão de moeda: "${value}"`)
@@ -166,8 +188,17 @@ export function formatBasisPoints(basisPoints: number): string {
  * parseBasisPoints("2.50")  // → 250
  */
 export function parseBasisPoints(value: string): number {
-  const normalized = value.trim().replace(',', '.')
-  const parsed = parseFloat(normalized)
+  // QA-057: mesma normalização robusta de parseCurrencyToCents (o replace único de
+  // vírgula falhava em formatos com milhar). Taxas raramente usam milhar, mas
+  // mantemos consistente para evitar o mesmo defeito.
+  let s = value.trim().replace(/[^\d.,-]/g, '')
+  const hasComma = s.includes(',')
+  const hasDot = s.includes('.')
+  if (hasComma && hasDot) s = s.replace(/\./g, '').replace(',', '.')
+  else if (hasComma) s = s.replace(',', '.')
+  else if (hasDot && ((s.match(/\./g) || []).length) > 1) s = s.replace(/\./g, '')
+
+  const parsed = parseFloat(s)
   if (isNaN(parsed)) throw new Error(`Taxa inválida: "${value}"`)
   return Math.round(parsed * 100)
 }
