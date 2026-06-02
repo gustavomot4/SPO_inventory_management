@@ -117,6 +117,14 @@ export default function NovoProdutoPage() {
     }
     if (variations.length === 0) {
       errs.variations = 'Adicione pelo menos uma variação'
+    } else {
+      // QA-045: validar campos numericos das variacoes
+      for (const v of variations) {
+        const min = parseInt(v.minStock || '0', 10)
+        const qty = parseInt(v.stockQuantity || '0', 10)
+        if (isNaN(min) || min < 0) { errs.variations = 'Estoque mínimo deve ser um número ≥ 0'; break }
+        if (isNaN(qty) || qty < 0) { errs.variations = 'Quantidade inicial deve ser um número ≥ 0'; break }
+      }
     }
 
     // Validar custo (opcional)

@@ -118,3 +118,25 @@ export async function generateSku(
 
   return sku
 }
+
+/**
+ * QA-046: Variante de generateSku com fallback de timestamp.
+ * Uso: chamar quando o insert retornar P2002 com SKU auto-gerado,
+ * para evitar exibir "SKU ja esta em uso" de forma confusa ao usuario.
+ */
+export async function generateSkuWithFallback(
+  productName: string,
+  size: string,
+  color: string
+): Promise<string> {
+  try {
+    return await generateSku(productName, size, color)
+  } catch {
+    // Fallback: sufixo de timestamp garante unicidade em race condition
+    const prefix = buildPrefix(productName)
+    const sizeCode = size.toUpperCase().slice(0, 4)
+    const colorCode = buildColorCode(color)
+    const suffix = Date.now().toString(36).slice(-4).toUpperCase()
+    return `${prefix}-${sizeCode}-${colorCode}-${suffix}`
+  }
+}

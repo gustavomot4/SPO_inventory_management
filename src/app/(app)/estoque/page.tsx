@@ -316,6 +316,8 @@ function NovaEntradaTab() {
 
       if (!res.ok) {
         const code = 'code' in json ? (json as { code?: string }).code : undefined
+        // QA-049: sessao expirada — redirecionar para reautenticar
+        if (code === 'UNAUTHORIZED') { window.location.href = '/pin?redirect=/estoque'; return }
         const errMsg =
           code === 'VARIATION_INACTIVE' ? 'Variação inativa' :
           code === 'VARIATION_NOT_FOUND' ? 'Variação não encontrada' :
