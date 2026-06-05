@@ -103,6 +103,26 @@ export async function PATCH(
       )
     }
 
+    // QA-058: aplicar a MESMA guarda do DELETE — inativar via PATCH não pode
+    // contornar a proteção (QA-044) contra categorias com produtos ativos vinculados.
+    // Sem isso, PATCH { isActive: false } reabre o estado ruim: produtos ficam presos
+    // a uma categoria inativa e não podem ser editados (PATCH de produto rejeita
+    // categoryId inativo).
+    if (isActive === false) {
+      const activeProducts = await prisma.product.count({
+        where: { categoryId: params.id, isActive: true, deletedAt: null },
+      })
+      if (activeProducts > 0) {
+        return NextResponse.json<ApiError>(
+          {
+            error: `Não é possível inativar: ${activeProducts} produto(s) ativo(s) vinculado(s) a esta categoria. Mova-os para outra categoria antes de inativar.`,
+            code: 'CATEGORY_HAS_ACTIVE_PRODUCTS',
+          },
+          { status: 422 }
+        )
+      }
+    }
+
     const category = await prisma.category.update({
       where: { id: params.id },
       data: updateData,
