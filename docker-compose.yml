@@ -29,21 +29,25 @@ services:
     container_name: spo-backup
     restart: unless-stopped
     volumes:
-      # Banco — somente leitura (nunca interfere com o sistema principal)
-      - spo_data:/data:ro
+      # Banco — rw exigido pela Online Backup API do SQLite p/ ler o WAL (-shm).
+      # A Backup API (.backup) NAO altera os dados de origem (QA-075).
+      - spo_data:/data
       # Pasta de backups na maquina da cliente
       - ./backups:/backups
       # Script de backup
       - ./docker-backup.sh:/backup.sh:ro
     command: >
       sh -c "
-        sed -i 's/\r//' /backup.sh &&
-        chmod +x /backup.sh &&
+        (apk add --no-cache sqlite ||
+          echo '[SPO Backup] AVISO: sem internet p/ instalar sqlite — backup em modo degradado (cp)') &&
+        sed 's/\r$//' /backup.sh > /usr/local/bin/spo-backup.sh &&
+        chmod +x /usr/local/bin/spo-backup.sh &&
         mkdir -p /backups &&
-        echo '50 17 * * * /backup.sh >> /var/log/backup.log 2>&1' > /etc/crontabs/root &&
+        echo '50 17 * * * /usr/local/bin/spo-backup.sh >> /var/log/backup.log 2>&1' > /etc/crontabs/root &&
         echo '[SPO Backup] Agendado para as 17h50 diariamente.' &&
         echo '[SPO Backup] Rodando backup de inicializacao...' &&
-        /backup.sh &&
+        (/usr/local/bin/spo-backup.sh ||
+          echo '[SPO Backup] AVISO: backup de inicializacao falhou — proxima tentativa no cron das 17h50') &&
         crond -f -l 8
       "
 

@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { generateSku } from '@/lib/sku'
+import { generateSkuWithFallback } from '@/lib/sku'
 import { MOVEMENT_TYPE } from '@/lib/enums'
 import type { ApiSuccess, ApiError, VariationResponse } from '@/types'
 
@@ -172,7 +172,9 @@ export async function POST(
         )
       }
     } else {
-      sku = await generateSku(product.name, sizeClean, colorClean)
+      // QA-077: usa a variante com fallback de timestamp (QA-046) — SKU informado
+      // manualmente continua tratado com SKU_TAKEN logo acima.
+      sku = await generateSkuWithFallback(product.name, sizeClean, colorClean)
     }
 
     const initialStock =

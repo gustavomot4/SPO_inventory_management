@@ -13,7 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { generateSku } from '@/lib/sku'
+import { generateSkuWithFallback } from '@/lib/sku'
 import { isPinVerified } from '@/lib/pin-session'
 import { MOVEMENT_TYPE } from '@/lib/enums'
 import type { ApiSuccess, ApiError, ProductListItem, ProductResponse, VariationResponse } from '@/types'
@@ -332,7 +332,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           )
         }
       } else {
-        sku = await generateSku(productName, size, color)
+        // QA-077: variante com fallback de timestamp — se a geração do SKU sofrer
+        // erro transitório de banco, ainda produz um SKU único em vez de abortar
+        // o cadastro com "SKU já está em uso" (QA-046). SKU informado pelo usuário
+        // continua tratado com SKU_TAKEN logo acima.
+        sku = await generateSkuWithFallback(productName, size, color)
       }
 
       variationsWithSku.push({
