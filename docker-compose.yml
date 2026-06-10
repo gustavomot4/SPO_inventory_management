@@ -11,7 +11,9 @@ services:
       - spo_data:/data
     environment:
       DATABASE_URL: "file:/data/spo.db"
-      SESSION_SECRET: "spo-pimenta-ousada-local-secret-trocar-em-producao"
+      # QA-060: SESSION_SECRET NÃO é mais fixado aqui. O docker-entrypoint.sh
+      # gera um segredo aleatório por instalação e o persiste em /data/session_secret.
+      # Versionar o segredo permitia forjar a sessão PIN (bypass de autenticação).
       NODE_ENV: "production"
       PORT: "3000"
       HOSTNAME: "0.0.0.0"

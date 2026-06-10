@@ -23,7 +23,8 @@ import type { ApiSuccess, ApiError, SettingsResponse } from '@/types'
 
 export async function GET(): Promise<NextResponse> {
   try {
-    let settings = await prisma.settings.findFirst()
+    // QA-067: ordenação determinística para sempre apontar a mesma linha singleton.
+    let settings = await prisma.settings.findFirst({ orderBy: { id: 'asc' } })
 
     if (!settings) {
       settings = await prisma.settings.create({
@@ -117,7 +118,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
     // QA-048: usar findFirst + update por ID encontrado (compativel com dados existentes).
     // O upsert com ID fixo criava registro duplicado em bancos com Settings pre-existente.
-    let existing = await prisma.settings.findFirst()
+    let existing = await prisma.settings.findFirst({ orderBy: { id: 'asc' } })
     if (!existing) {
       existing = await prisma.settings.create({
         data: { shopName: 'Pimenta Ousada' },

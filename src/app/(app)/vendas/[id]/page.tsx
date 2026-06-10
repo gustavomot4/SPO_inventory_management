@@ -362,6 +362,11 @@ export default function VendaDetalhePage() {
                 <span className="w-24 text-right text-destructive">-{formatCurrency(sale.discountCents)}</span>
               </div>
             )}
+            {/* QA-073: feeCents/cardMachineName vêm null SEM sessão PIN (projeção
+                pública de GET /api/sales/[id] — QA-064). Esta linha renderiza
+                apenas para a dona autenticada (ela chega aqui via /vendas, cuja
+                lista exige PIN). No fluxo aberto pós-venda (vendedora), ocultar a
+                taxa é intencional — COM-007: dado interno. NÃO é ramo morto. */}
             {sale.feeCents && sale.feeCents > 0 && (
               <div className="flex justify-end gap-8 text-sm">
                 <span className="text-muted-foreground">Taxa {sale.cardMachineName}</span>

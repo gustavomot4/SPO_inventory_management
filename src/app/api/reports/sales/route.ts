@@ -12,7 +12,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { SALE_STATUS, PAYMENT_METHOD_LABELS } from '@/lib/enums'
-import { storeDayStartToUtc, storeDayEndToUtc, utcToStoreDay, storeToday } from '@/lib/timezone'
+
+// Rota dinâmica: usa searchParams + sessão PIN. Evita tentativa de prerender estático.
+export const dynamic = 'force-dynamic'
+
+import { storeDayStartToUtc, storeDayEndToUtc, utcToStoreDay, storeToday, isValidYmd } from '@/lib/timezone'
 import type { PaymentMethod } from '@/lib/enums'
 import type {
   ApiSuccess,
@@ -31,17 +35,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const dateFrom = searchParams.get('dateFrom') || undefined
     const dateTo = searchParams.get('dateTo') || undefined
 
-    // QA-036: validar formato YYYY-MM-DD
-    const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
-    if (dateFrom && !DATE_REGEX.test(dateFrom)) {
+    // QA-036 + QA-070: validar formato E data de calendário real (rejeita 2026-13-45)
+    if (dateFrom && !isValidYmd(dateFrom)) {
       return NextResponse.json<ApiError>(
-        { error: 'O parâmetro "dateFrom" deve estar no formato YYYY-MM-DD (ex: 2026-01-01)', code: 'INVALID_PARAM' },
+        { error: 'O parâmetro "dateFrom" deve ser uma data válida no formato YYYY-MM-DD (ex: 2026-01-01)', code: 'INVALID_PARAM' },
         { status: 400 }
       )
     }
-    if (dateTo && !DATE_REGEX.test(dateTo)) {
+    if (dateTo && !isValidYmd(dateTo)) {
       return NextResponse.json<ApiError>(
-        { error: 'O parâmetro "dateTo" deve estar no formato YYYY-MM-DD (ex: 2026-12-31)', code: 'INVALID_PARAM' },
+        { error: 'O parâmetro "dateTo" deve ser uma data válida no formato YYYY-MM-DD (ex: 2026-12-31)', code: 'INVALID_PARAM' },
         { status: 400 }
       )
     }

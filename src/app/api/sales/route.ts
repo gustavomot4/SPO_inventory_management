@@ -13,7 +13,7 @@ import {
   CARD_PAYMENT_METHODS, PAYMENT_METHOD_LABELS,
 } from '@/lib/enums'
 import type { PaymentMethod } from '@/lib/enums'
-import { storeDayStartToUtc, storeDayEndToUtc } from '@/lib/timezone'
+import { storeDayStartToUtc, storeDayEndToUtc, isValidYmd } from '@/lib/timezone'
 import type { ApiSuccess, ApiError, SaleResponse, SaleListItem, SaleItemResponse } from '@/types'
 
 function formatSaleItem(item: {
@@ -338,17 +338,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const dateTo = searchParams.get('dateTo') || undefined
     const cursor = searchParams.get('cursor') || undefined
 
-    // QA-036: validar formato YYYY-MM-DD
-    const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
-    if (dateFrom && !DATE_REGEX.test(dateFrom)) {
+    // QA-036 + QA-070: validar formato E data de calendário real (rejeita 2026-13-45)
+    if (dateFrom && !isValidYmd(dateFrom)) {
       return NextResponse.json<ApiError>(
-        { error: 'O parâmetro "dateFrom" deve estar no formato YYYY-MM-DD', code: 'INVALID_PARAM' },
+        { error: 'O parâmetro "dateFrom" deve ser uma data válida no formato YYYY-MM-DD', code: 'INVALID_PARAM' },
         { status: 400 }
       )
     }
-    if (dateTo && !DATE_REGEX.test(dateTo)) {
+    if (dateTo && !isValidYmd(dateTo)) {
       return NextResponse.json<ApiError>(
-        { error: 'O parâmetro "dateTo" deve estar no formato YYYY-MM-DD', code: 'INVALID_PARAM' },
+        { error: 'O parâmetro "dateTo" deve ser uma data válida no formato YYYY-MM-DD', code: 'INVALID_PARAM' },
         { status: 400 }
       )
     }

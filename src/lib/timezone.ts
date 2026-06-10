@@ -63,3 +63,19 @@ export function utcToStoreDay(utcIso: string): string {
 export function storeToday(): string {
   return utcToStoreDay(new Date().toISOString())
 }
+
+/**
+ * QA-070: valida uma data no formato YYYY-MM-DD garantindo que é um dia de
+ * calendário REAL (rejeita 2026-13-45). O regex sozinho aceitava datas inválidas,
+ * que o Date.UTC "rolava" silenciosamente, deslocando filtros e relatórios.
+ */
+export function isValidYmd(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const { y, m, d } = parseYmd(value)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  )
+}

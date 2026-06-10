@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateSku } from '@/lib/sku'
+import { MOVEMENT_TYPE } from '@/lib/enums'
 import type { ApiSuccess, ApiError, VariationResponse } from '@/types'
 
 type RouteContext = { params: { id: string } }
@@ -174,21 +175,41 @@ export async function POST(
       sku = await generateSku(product.name, sizeClean, colorClean)
     }
 
-    const variation = await prisma.productVariation.create({
-      data: {
-        productId: params.id,
-        size: sizeClean,
-        color: colorClean,
-        sku,
-        stockQuantity:
-          typeof stockQuantity === 'number' && Number.isInteger(stockQuantity)
-            ? Math.max(0, stockQuantity)
-            : 0,
-        minStock:
-          typeof minStock === 'number' && Number.isInteger(minStock)
-            ? Math.max(0, minStock)
-            : 2,
-      },
+    const initialStock =
+      typeof stockQuantity === 'number' && Number.isInteger(stockQuantity)
+        ? Math.max(0, stockQuantity)
+        : 0
+
+    // QA-066: criação + movimento de abertura na MESMA transação, mantendo a
+    // invariante stockQuantity == soma dos movimentos.
+    const variation = await prisma.$transaction(async (tx) => {
+      const created = await tx.productVariation.create({
+        data: {
+          productId: params.id,
+          size: sizeClean,
+          color: colorClean,
+          sku,
+          stockQuantity: initialStock,
+          minStock:
+            typeof minStock === 'number' && Number.isInteger(minStock)
+              ? Math.max(0, minStock)
+              : 2,
+        },
+      })
+
+      if (initialStock > 0) {
+        await tx.stockMovement.create({
+          data: {
+            variationId: created.id,
+            type: MOVEMENT_TYPE.ENTRY,
+            quantity: initialStock,
+            balanceAfter: initialStock,
+            notes: 'Estoque inicial (nova variação)',
+          },
+        })
+      }
+
+      return created
     })
 
     return NextResponse.json<ApiSuccess<VariationResponse>>(

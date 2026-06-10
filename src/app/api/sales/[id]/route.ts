@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { PAYMENT_METHOD_LABELS } from '@/lib/enums'
+import { isPinVerified } from '@/lib/pin-session'
 import type { PaymentMethod } from '@/lib/enums'
 import type { ApiSuccess, ApiError, SaleResponse, SaleItemResponse } from '@/types'
 
@@ -38,7 +39,7 @@ function formatSaleItem(item: {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: RouteContext
 ): Promise<NextResponse> {
   try {
@@ -68,6 +69,16 @@ export async function GET(
       )
     }
 
+    // QA-064: dados internos (taxa, maquininha) só aparecem com PIN verificado.
+    // A comanda pública precisa do recurso, mas não da taxa/maquininha (COM-007).
+    //
+    // QA-073 (decisão intencional): a página /vendas/[id] é ABERTA — logo após
+    // finalizar a venda, o PDV navega para cá SEM PIN para imprimir a comanda.
+    // Nesse fluxo (vendedora), a taxa fica oculta também na tela de detalhe — é o
+    // comportamento desejado (COM-007: taxa é dado interno). A dona chega ao
+    // detalhe via /vendas (lista exige PIN), com sessão ativa, e vê a taxa.
+    const showInternal = await isPinVerified(request)
+
     const responseData: SaleResponse = {
       id: sale.id,
       status: sale.status,
@@ -76,11 +87,11 @@ export async function GET(
       subtotalCents: sale.subtotalCents,
       discountCents: sale.discountCents,
       totalCents: sale.totalCents,
-      cardMachineId: sale.cardMachineId,
-      cardMachineName: sale.cardMachine?.name ?? null,
-      feeCents: sale.feeCents,
+      cardMachineId: showInternal ? sale.cardMachineId : null,
+      cardMachineName: showInternal ? (sale.cardMachine?.name ?? null) : null,
+      feeCents: showInternal ? sale.feeCents : null,
       installments: sale.installments,
-      installmentFeeBasisPoints: sale.installmentFeeBasisPoints,
+      installmentFeeBasisPoints: showInternal ? sale.installmentFeeBasisPoints : null,
       notes: sale.notes,
       cancelledAt: sale.cancelledAt,
       cancelReason: sale.cancelReason,

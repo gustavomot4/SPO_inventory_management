@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isPinVerified } from '@/lib/pin-session'
 import type { ApiSuccess, ApiError, ProductResponse, VariationResponse } from '@/types'
 
 type RouteContext = { params: { id: string } }
@@ -24,7 +25,7 @@ function formatVariation(v: {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: RouteContext
 ): Promise<NextResponse> {
   try {
@@ -43,11 +44,14 @@ export async function GET(
       )
     }
 
+    // QA-062: custo (margem) só é exposto a quem tem PIN verificado.
+    const showCost = await isPinVerified(request)
+
     return NextResponse.json<ApiSuccess<ProductResponse>>({
       data: {
         id: product.id, name: product.name,
         categoryId: product.categoryId, categoryName: product.category.name,
-        priceCents: product.priceCents, costCents: product.costCents,
+        priceCents: product.priceCents, costCents: showCost ? product.costCents : null,
         isActive: product.isActive, deletedAt: product.deletedAt,
         variations: product.variations.map(formatVariation),
         createdAt: product.createdAt, updatedAt: product.updatedAt,

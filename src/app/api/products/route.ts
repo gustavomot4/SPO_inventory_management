@@ -4,7 +4,9 @@
 // SPO — Sistema Pimenta Ousada | PROD-002 + PROD-003
 // =============================================================================
 //
-// Acesso: Público.
+// Acesso: GET é público (exceção explícita no middleware — o PDV precisa listar
+// produtos sem PIN; costCents é omitido sem sessão, QA-062). POST exige PIN
+// (QA-034 — o middleware intercepta o caminho base de '/api/products/:path*').
 // Paginação: cursor-based (id do último item) com pageSize padrão 20, máx 100.
 // SKU: gerado automaticamente via src/lib/sku.ts quando não informado.
 // =============================================================================
@@ -12,6 +14,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateSku } from '@/lib/sku'
+import { isPinVerified } from '@/lib/pin-session'
+import { MOVEMENT_TYPE } from '@/lib/enums'
 import type { ApiSuccess, ApiError, ProductListItem, ProductResponse, VariationResponse } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -110,6 +114,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const lastItem = products.at(-1)
 
+    // QA-062: custo (margem) só é exposto a quem tem PIN verificado.
+    const showCost = await isPinVerified(request)
+
     const data: ProductListItem[] = products.map((p) => {
       const activeVariations = p.variations
       const totalStock = activeVariations.reduce((sum, v) => sum + v.stockQuantity, 0)
@@ -123,7 +130,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         categoryId: p.categoryId,
         categoryName: p.category.name,
         priceCents: p.priceCents,
-        costCents: p.costCents,
+        costCents: showCost ? p.costCents : null,
         isActive: p.isActive,
         variationCount: activeVariations.length,
         variationSkus: activeVariations.map(v => v.sku),
@@ -237,6 +244,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
+    // QA-069: impedir produtos duplicados pelo mesmo nome (entre os não excluídos).
+    // Product.name não tem unicidade no banco; a checagem é na aplicação. A UI já
+    // trata o código NAME_TAKEN (até então inalcançável para produto).
+    //
+    // QA-074 (limitação conhecida e ACEITA): este find-then-create é TOCTOU — dois
+    // POSTs simultâneos com o mesmo nome podem ambos passar pela checagem e criar
+    // duplicata. A garantia real exigiria @@unique([categoryId, name]) + P2002,
+    // mas a migration foi deliberadamente descartada (11ª passagem): bancos em
+    // produção podem já conter nomes duplicados e o `migrate deploy` falharia na
+    // máquina da cliente. Em PDV local single-tenant (1-2 operadoras), o risco de
+    // corrida é desprezível — tratar como best-effort. Se um dia migrar para
+    // multiusuário/cloud (v2), promover para unicidade no banco.
+    const duplicateName = await prisma.product.findFirst({
+      where: { name: (name as string).trim(), deletedAt: null },
+      select: { id: true },
+    })
+    if (duplicateName) {
+      return NextResponse.json<ApiError>(
+        { error: 'Já existe um produto com este nome', code: 'NAME_TAKEN' },
+        { status: 409 }
+      )
+    }
+
     // --- Validar variações ---
 
     if (!Array.isArray(variations) || variations.length === 0) {
@@ -340,6 +370,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           },
         },
       })
+
+      // QA-066: estoque inicial > 0 gera StockMovement de abertura, mantendo a
+      // invariante do schema (stockQuantity == soma dos movimentos). Sem isto a
+      // trilha de auditoria ficava incompleta para todo produto criado com saldo.
+      for (const v of created.variations) {
+        if (v.stockQuantity > 0) {
+          await tx.stockMovement.create({
+            data: {
+              variationId: v.id,
+              type: MOVEMENT_TYPE.ENTRY,
+              quantity: v.stockQuantity,
+              balanceAfter: v.stockQuantity,
+              notes: 'Estoque inicial (cadastro do produto)',
+            },
+          })
+        }
+      }
+
       return created
     })
 

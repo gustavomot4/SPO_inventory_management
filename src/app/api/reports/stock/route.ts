@@ -11,6 +11,9 @@ import { prisma } from '@/lib/prisma'
 import { getStockStatus } from '@/lib/utils'
 import type { ApiError, StockReportItem, StockReportMeta } from '@/types'
 
+// Rota dinâmica: usa searchParams + sessão PIN. Evita tentativa de prerender estático.
+export const dynamic = 'force-dynamic'
+
 type StockReportSuccess = { data: StockReportItem[]; meta: StockReportMeta }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {

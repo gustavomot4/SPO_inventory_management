@@ -4,7 +4,7 @@
 // =============================================================================
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Search, Loader2, X, Plus, Minus } from 'lucide-react'
@@ -91,6 +91,8 @@ export default function NovaVendaPage() {
   // ── Submit ──
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // QA-065: trava síncrona contra duplo-clique (não depende do ciclo de render do React)
+  const inFlight = useRef(false)
 
   // ── Carregar maquininhas ──
   useEffect(() => {
@@ -203,6 +205,8 @@ export default function NovaVendaPage() {
 
   // ── Finalizar ──
   async function handleSubmit() {
+    // QA-065: previne dupla submissão (duplo-clique → venda duplicada + duplo decremento)
+    if (inFlight.current) return
     setSubmitError(null)
     if (cart.length === 0) { setSubmitError('Adicione pelo menos um item ao carrinho.'); return }
     if (!paymentMethod) { setSubmitError('Selecione o método de pagamento.'); return }
@@ -211,6 +215,7 @@ export default function NovaVendaPage() {
     }
     if (discountCents > subtotalCents) { setSubmitError('Desconto não pode ser maior que o subtotal.'); return }
 
+    inFlight.current = true
     setSubmitting(true)
     try {
       const res = await fetch('/api/sales', {
@@ -250,6 +255,7 @@ export default function NovaVendaPage() {
       setSubmitError('Erro de conexão. Tente novamente.')
     } finally {
       setSubmitting(false)
+      inFlight.current = false
     }
   }
 

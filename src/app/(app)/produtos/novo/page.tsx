@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
@@ -56,6 +56,8 @@ export default function NovoProdutoPage() {
   ])
   const [errors, setErrors] = useState<ProductFormErrors>({})
   const [saving, setSaving] = useState(false)
+  // QA-065: trava síncrona contra duplo-clique (evita produtos duplicados)
+  const inFlight = useRef(false)
 
   function newDraft(): VariationDraft {
     return {
@@ -70,11 +72,21 @@ export default function NovoProdutoPage() {
   }
 
   // Carregar categorias
+  // QA-072: GET /api/categories exige PIN (middleware intercepta o caminho base).
+  // Sem sessao, esta pagina de cadastro (operacao protegida — QA-034) era um beco
+  // sem saida: dropdown de categoria vazio e 401 tecnico ao salvar. Redirecionar
+  // para /pin no 401, como vendas e estoque ja fazem (padrao QA-049).
   useEffect(() => {
     fetch('/api/categories')
-      .then(r => r.json())
-      .then((json: ApiResponse<CategoryResponse[]>) => {
-        if ('data' in json) setCategories(json.data)
+      .then(r => {
+        if (r.status === 401) {
+          window.location.href = '/pin?redirect=/produtos/novo'
+          return null
+        }
+        return r.json()
+      })
+      .then((json: ApiResponse<CategoryResponse[]> | null) => {
+        if (json && 'data' in json) setCategories(json.data)
       })
       .catch(() => {})
   }, [])
@@ -143,7 +155,9 @@ export default function NovoProdutoPage() {
 
   // Submeter
   async function handleSubmit() {
+    if (inFlight.current) return
     if (!validate()) return
+    inFlight.current = true
     setSaving(true)
 
     let priceCents = 0
@@ -178,6 +192,11 @@ export default function NovoProdutoPage() {
 
       if (!res.ok) {
         const apiError = 'error' in json ? json : null
+        // QA-072: sessao expirou entre o load e o submit — reautenticar (padrao QA-049)
+        if (apiError?.code === 'UNAUTHORIZED') {
+          window.location.href = '/pin?redirect=/produtos/novo'
+          return
+        }
         if (apiError?.code === 'NAME_TAKEN') {
           setErrors({ name: 'Já existe um produto com este nome' })
         } else if (apiError?.code === 'CATEGORY_NOT_FOUND') {
@@ -197,6 +216,7 @@ export default function NovoProdutoPage() {
       setErrors({ general: 'Erro de conexão. Tente novamente.' })
     } finally {
       setSaving(false)
+      inFlight.current = false
     }
   }
 

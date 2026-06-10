@@ -10,7 +10,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
   CheckCircle2,
@@ -227,6 +227,8 @@ function NovaEntradaTab() {
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<EntradaFormErrors>({})
   const [success, setSuccess] = useState<EntradaSuccess | null>(null)
+  // QA-065: trava síncrona contra duplo-clique
+  const inFlight = useRef(false)
 
   // Buscar produtos conforme digita
   useEffect(() => {
@@ -295,7 +297,9 @@ function NovaEntradaTab() {
   }
 
   async function handleSubmit() {
+    if (inFlight.current) return
     if (!validate()) return
+    inFlight.current = true
     setSubmitting(true)
     setSuccess(null)
 
@@ -344,6 +348,7 @@ function NovaEntradaTab() {
       setErrors({ general: 'Erro de conexão. Tente novamente.' })
     } finally {
       setSubmitting(false)
+      inFlight.current = false
     }
   }
 

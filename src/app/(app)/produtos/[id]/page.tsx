@@ -361,7 +361,14 @@ export default function ProdutoDetalhePage() {
         body: JSON.stringify({ minStock }),
       })
       const json: ApiResponse<VariationResponse> = await res.json()
-      if (!res.ok) return 'error' in json ? json.error : 'Erro ao salvar'
+      if (!res.ok) {
+        // QA-072: sessao expirada — reautenticar (padrao QA-049)
+        if (res.status === 401) {
+          window.location.href = '/pin?redirect=/produtos/' + productId
+          return null
+        }
+        return 'error' in json ? json.error : 'Erro ao salvar'
+      }
       if ('data' in json) {
         setProduct(prev =>
           prev
@@ -379,7 +386,11 @@ export default function ProdutoDetalhePage() {
   async function handleDeactivateVariation(varId: string) {
     try {
       const res = await fetch(`/api/products/${productId}/variations/${varId}`, { method: 'DELETE' })
-      if (!res.ok) return // QA-028: não atualizar UI se API falhou
+      if (!res.ok) {
+        // QA-072: sessao expirada — reautenticar (padrao QA-049)
+        if (res.status === 401) { window.location.href = '/pin?redirect=/produtos/' + productId }
+        return // QA-028: não atualizar UI se API falhou
+      }
       setProduct(prev =>
         prev
           ? { ...prev, variations: prev.variations.map(v => v.id === varId ? { ...v, isActive: false } : v) }
@@ -410,6 +421,11 @@ export default function ProdutoDetalhePage() {
       const json: ApiResponse<VariationResponse> = await res.json()
       if (!res.ok) {
         const code = 'code' in json ? (json as { code?: string }).code : undefined
+        // QA-072: sessao expirada — reautenticar (padrao QA-049)
+        if (code === 'UNAUTHORIZED') {
+          window.location.href = '/pin?redirect=/produtos/' + productId
+          return
+        }
         const msg = code === 'DUPLICATE_VARIATION'
           ? 'Já existe uma variação com este tamanho e cor'
           : code === 'SKU_TAKEN'
@@ -564,7 +580,14 @@ export default function ProdutoDetalhePage() {
               value={categoryId}
               onChange={e => { setCategoryId(e.target.value); setFormErrors(p => ({ ...p, categoryId: undefined })) }}
               error={formErrors.categoryId}
-              options={categories.map(c => ({ value: c.id, label: c.name }))}
+              // QA-072: sem PIN, GET /api/categories responde 401 e a lista vem
+              // vazia — o select ficava em branco (nem a categoria atual aparecia).
+              // Fallback: exibir a categoria atual do produto (vem no GET publico
+              // do produto). Trocar de categoria de fato exige PIN — o PATCH ja
+              // redireciona para /pin no 401 (QA-049).
+              options={categories.length > 0
+                ? categories.map(c => ({ value: c.id, label: c.name }))
+                : [{ value: product.categoryId, label: product.categoryName }]}
             />
             <Input
               label="Preço de venda (R$)"

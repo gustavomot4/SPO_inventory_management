@@ -19,6 +19,7 @@ import { getIronSession } from 'iron-session'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { sessionOptions, type SessionData } from '@/lib/session'
+import { safeCompareString } from '@/lib/safe-compare'
 import {
   getRateLimitKey,
   checkRateLimit,
@@ -91,13 +92,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
-    const settings = await prisma.settings.findFirst({ select: { id: true, pinHash: true } })
+    // QA-067: linha autoritativa = a que tem pinHash (se houver), senão a mais antiga.
+    const settings =
+      (await prisma.settings.findFirst({
+        where: { pinHash: { not: null } },
+        select: { id: true, pinHash: true },
+      })) ??
+      (await prisma.settings.findFirst({
+        orderBy: { id: 'asc' },
+        select: { id: true, pinHash: true },
+      }))
 
     let currentPinValid = false
     if (settings?.pinHash) {
       currentPinValid = await bcrypt.compare(currentPin, settings.pinHash)
     } else {
-      currentPinValid = currentPin === (process.env.APP_PIN ?? '1234')
+      // QA-068: comparação constant-time no fallback (evita timing attack)
+      currentPinValid = safeCompareString(currentPin, process.env.APP_PIN ?? '1234')
     }
 
     if (!currentPinValid) {

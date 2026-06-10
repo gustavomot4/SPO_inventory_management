@@ -12,27 +12,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getIronSession } from 'iron-session'
 import bcrypt from 'bcryptjs'
-import { timingSafeEqual } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { sessionOptions, type SessionData } from '@/lib/session'
+import { safeCompareString } from '@/lib/safe-compare'
 import {
   getRateLimitKey,
   checkRateLimit,
   recordFailedAttempt,
   clearAttempts,
 } from '@/lib/rate-limit'
-
-// QA-012: comparacao constant-time
-function safeCompareString(a: string, b: string): boolean {
-  try {
-    const bufA = Buffer.from(a)
-    const bufB = Buffer.from(b)
-    if (bufA.length !== bufB.length) return false
-    return timingSafeEqual(bufA, bufB)
-  } catch {
-    return false
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,7 +39,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const settings = await prisma.settings.findFirst({ select: { pinHash: true } })
+    // QA-067: leitura determinística — se QUALQUER linha Settings tem pinHash,
+    // ela é a autoritativa. Sem isto, com 2 linhas (uma sem PIN), o findFirst podia
+    // retornar a linha sem PIN e cair no fallback APP_PIN (bypass do PIN real).
+    const settings =
+      (await prisma.settings.findFirst({
+        where: { pinHash: { not: null } },
+        select: { pinHash: true },
+      })) ?? (await prisma.settings.findFirst({ select: { pinHash: true } }))
 
     let isValid = false
     if (settings?.pinHash) {
