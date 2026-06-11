@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isPinVerified } from '@/lib/pin-session'
 import type { ApiSuccess, ApiError, SettingsResponse } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -21,7 +22,7 @@ import type { ApiSuccess, ApiError, SettingsResponse } from '@/types'
 // Acesso: Publico (comanda precisa sem autenticacao)
 // ---------------------------------------------------------------------------
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     // QA-067: ordenação determinística para sempre apontar a mesma linha singleton.
     let settings = await prisma.settings.findFirst({ orderBy: { id: 'asc' } })
@@ -32,6 +33,19 @@ export async function GET(): Promise<NextResponse> {
       })
     }
 
+    // QA-081: informar se ha PIN proprio configurado — SOMENTE para sessao com
+    // PIN verificado (a tela de Configuracoes usa isto para exibir o aviso de
+    // "sistema no PIN padrao 1234"). Nao expor ao publico: revelaria que o
+    // default esta em uso. Mesma logica autoritativa do QA-067 (linha com pinHash).
+    let pinConfigured: boolean | undefined
+    if (await isPinVerified(request)) {
+      const pinRow = await prisma.settings.findFirst({
+        where: { pinHash: { not: null } },
+        select: { id: true },
+      })
+      pinConfigured = pinRow !== null
+    }
+
     return NextResponse.json<ApiSuccess<SettingsResponse>>({
       data: {
         id: settings.id,
@@ -39,6 +53,7 @@ export async function GET(): Promise<NextResponse> {
         address: settings.address ?? null,
         phone: settings.phone ?? null,
         updatedAt: settings.updatedAt,
+        ...(pinConfigured !== undefined ? { pinConfigured } : {}),
       },
     })
   } catch (error) {

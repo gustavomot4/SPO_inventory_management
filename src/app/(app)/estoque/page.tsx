@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Badge } from '@/components/ui/Badge'
 import { cn } from '@/lib/utils'
+import { storeDayStartToUtc } from '@/lib/timezone'
 import type {
   ProductListItem,
   ProductResponse,
@@ -308,7 +309,12 @@ function NovaEntradaTab() {
       quantity: parseInt(quantity, 10),
     }
     if (notes.trim()) payload.notes = notes.trim()
-    if (receivedAt) payload.receivedAt = new Date(receivedAt).toISOString()
+    // QA-084: o input type="date" retorna "YYYY-MM-DD" e new Date("YYYY-MM-DD")
+    // interpreta como MEIA-NOITE UTC = 21h do dia ANTERIOR no fuso da loja
+    // (UTC−3) → toda entrada com data escolhida caia no dia comercial errado.
+    // storeDayStartToUtc converte para o instante UTC do início do dia NO FUSO
+    // DA LOJA (mesma solução do QA-055 para filtros de venda).
+    if (receivedAt) payload.receivedAt = storeDayStartToUtc(receivedAt)
 
     try {
       const res = await fetch('/api/stock-entries', {

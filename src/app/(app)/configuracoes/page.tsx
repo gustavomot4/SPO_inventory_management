@@ -14,7 +14,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { CreditCard, Lock, Store, Plus, Pencil, X, Check, ChevronDown, Trash2, Loader2, Tag } from 'lucide-react'
+import { CreditCard, Lock, Store, Plus, Pencil, X, Check, ChevronDown, Trash2, Loader2, Tag, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
@@ -443,6 +443,9 @@ export default function ConfiguracoesPage() {
   const [confirmPin, setConfirmPin] = useState('')
   const [changingPin, setChangingPin] = useState(false)
   const [pinSaved, setPinSaved] = useState(false)
+  // QA-081: false = sistema ainda usa o PIN padrao (1234) — exibir aviso.
+  // null = desconhecido (carregando ou resposta sem o campo).
+  const [pinConfigured, setPinConfigured] = useState<boolean | null>(null)
   const [pinError, setPinError] = useState<{
     current?: string
     new?: string
@@ -459,6 +462,8 @@ export default function ConfiguracoesPage() {
           setShopName(j.data.shopName)
           setShopAddress(j.data.address ?? '')
           setShopPhone(j.data.phone ?? '')
+          // QA-081: campo presente apenas com sessao PIN (esta tela e protegida)
+          setPinConfigured(j.data.pinConfigured ?? null)
         }
       })
       .catch(() => {})
@@ -665,6 +670,7 @@ export default function ConfiguracoesPage() {
       setNewPin('')
       setConfirmPin('')
       setPinSaved(true)
+      setPinConfigured(true) // QA-081: PIN proprio definido — remover o aviso
       setTimeout(() => setPinSaved(false), 4000)
     } catch {
       setPinError({ general: 'Erro de conexao. Tente novamente.' })
@@ -958,6 +964,20 @@ export default function ConfiguracoesPage() {
             <Lock className="h-4 w-4 text-brand-600" />
             <p className="text-sm font-medium text-foreground">Alterar PIN de acesso</p>
           </div>
+
+          {/* QA-081: aviso enquanto o sistema usa o PIN padrao (APP_PIN/1234).
+              Sem PIN proprio, qualquer pessoa que conheca o padrao acessa
+              relatorios e configuracoes. */}
+          {pinConfigured === false && (
+            <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3" role="alert">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <p className="text-xs text-amber-800 leading-relaxed">
+                O sistema ainda esta usando o <strong>PIN padrao (1234)</strong>, que e
+                publico. Defina um PIN so seu abaixo — no campo &quot;PIN atual&quot;,
+                digite <strong>1234</strong>.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-4 max-w-xs">
             <Input

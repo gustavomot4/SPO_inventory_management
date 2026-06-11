@@ -85,6 +85,8 @@ export default function NovaVendaPage() {
   const [cardMachines, setCardMachines] = useState<CardMachineResponse[]>([])
   const [cardMachineId, setCardMachineId] = useState('')
   const [discountInput, setDiscountInput] = useState('')
+  // QA-079: desconto em valor fixo (R$) OU percentual (%) — RN-004.5 / FLUXO-001
+  const [discountMode, setDiscountMode] = useState<'BRL' | 'PCT'>('BRL')
   const [installments, setInstallments] = useState(1)
   const [machineInstallments, setMachineInstallments] = useState<CardMachineInstallmentResponse[]>([])
 
@@ -185,8 +187,20 @@ export default function NovaVendaPage() {
 
   // ── Cálculos ──
   const subtotalCents = cart.reduce((s, c) => s + c.unitPriceCents * c.quantity, 0)
+  // QA-079: o percentual e convertido para centavos AQUI — a API continua
+  // recebendo apenas discountCents absoluto (CHECK total = subtotal − desconto
+  // do banco permanece intacto; backend nao muda).
   let discountCents = 0
-  try { discountCents = discountInput.trim() ? Math.max(0, parseCurrencyToCents(discountInput)) : 0 } catch { discountCents = 0 }
+  if (discountInput.trim()) {
+    if (discountMode === 'PCT') {
+      const pct = parseFloat(discountInput.replace(',', '.'))
+      if (!isNaN(pct) && pct > 0) {
+        discountCents = Math.round(subtotalCents * Math.min(pct, 100) / 100)
+      }
+    } else {
+      try { discountCents = Math.max(0, parseCurrencyToCents(discountInput)) } catch { discountCents = 0 }
+    }
+  }
   const totalCents = Math.max(0, subtotalCents - discountCents)
 
   const selectedMachine = cardMachines.find(m => m.id === cardMachineId)
@@ -475,19 +489,61 @@ export default function NovaVendaPage() {
                 <span className="text-muted-foreground">Subtotal</span>
                 <span className="font-medium">{formatCurrency(subtotalCents)}</span>
               </div>
-              {/* Desconto */}
+              {/* Desconto — QA-079: valor fixo (R$) ou percentual (%) — RN-004.5 */}
               <div className="flex items-center justify-between gap-2">
                 <span className="text-muted-foreground shrink-0">Desconto</span>
-                <div className="w-28">
-                  <input
-                    type="text"
-                    value={discountInput}
-                    onChange={e => setDiscountInput(e.target.value)}
-                    placeholder="R$ 0,00"
-                    className="w-full rounded border border-input bg-background px-2 py-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
+                <div className="flex items-center gap-1.5">
+                  <div className="flex rounded-md border border-input overflow-hidden shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => { setDiscountMode('BRL'); setDiscountInput('') }}
+                      aria-label="Desconto em reais"
+                      className={cn(
+                        'px-2 py-1 text-xs font-medium transition-colors',
+                        discountMode === 'BRL'
+                          ? 'bg-foreground text-background'
+                          : 'bg-background text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      R$
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDiscountMode('PCT'); setDiscountInput('') }}
+                      aria-label="Desconto percentual"
+                      className={cn(
+                        'px-2 py-1 text-xs font-medium transition-colors border-l border-input',
+                        discountMode === 'PCT'
+                          ? 'bg-foreground text-background'
+                          : 'bg-background text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      %
+                    </button>
+                  </div>
+                  <div className="w-24">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={discountInput}
+                      onChange={e => setDiscountInput(e.target.value)}
+                      placeholder={discountMode === 'PCT' ? 'Ex: 10' : 'R$ 0,00'}
+                      aria-label={discountMode === 'PCT' ? 'Desconto em percentual' : 'Desconto em reais'}
+                      className="w-full rounded border border-input bg-background px-2 py-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
                 </div>
               </div>
+              {/* QA-079/QA-080: valor efetivo do desconto sempre visivel — confirma
+                  a conversao de % e expoe erros de digitacao de milhar (ex: "1.500") */}
+              {discountCents > 0 && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    Desconto aplicado{discountMode === 'PCT' && discountInput.trim() ? ` (${discountInput.trim()}%)` : ''}
+                  </span>
+                  <span>-{formatCurrency(discountCents)}</span>
+                </div>
+              )}
               <div className="border-t border-border pt-2 flex justify-between font-semibold">
                 <span>Total</span>
                 <span className="text-brand-700 text-base">{formatCurrency(totalCents)}</span>

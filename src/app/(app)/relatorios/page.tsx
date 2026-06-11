@@ -275,13 +275,25 @@ function StockTab() {
               label="Custo Investido"
               value={meta.totalStockCostCents !== null ? formatCurrency(meta.totalStockCostCents) : '--'}
               icon={TrendingDown}
-              hint={meta.totalStockCostCents === null ? 'Cadastre o preco de custo nos produtos' : undefined}
+              hint={
+                meta.totalStockCostCents === null
+                  ? 'Cadastre o preco de custo nos produtos'
+                  : meta.costCoveragePct !== null && meta.costCoveragePct < 100
+                  ? 'Cobre apenas ' + meta.costCoveragePct + '% dos itens'
+                  : undefined
+              }
             />
             <SummaryCard
               label="Lucro Potencial"
               value={meta.estimatedPotentialProfitCents !== null ? formatCurrency(meta.estimatedPotentialProfitCents) : '--'}
               icon={DollarSign}
-              hint={meta.estimatedPotentialProfitCents !== null ? 'Se todo o estoque for vendido' : 'Cadastre o preco de custo nos produtos'}
+              hint={
+                meta.estimatedPotentialProfitCents === null
+                  ? 'Cadastre o preco de custo nos produtos'
+                  : meta.costCoveragePct !== null && meta.costCoveragePct < 100
+                  ? 'Superestimado — custo em so ' + meta.costCoveragePct + '% dos itens'
+                  : 'Se todo o estoque for vendido'
+              }
             />
           </div>
         </>
@@ -639,8 +651,10 @@ function SalesTab() {
             <SummaryCard label="Canceladas" value={String(summary!.cancelledCount)} icon={XCircle} />
           </div>
 
-          {/* Taxas + Lucro + Margem na mesma linha */}
-          {summary!.estimatedProfitCents !== null ? (
+          {/* Taxas + Lucro + Margem na mesma linha.
+              QA-078: Taxas Pagas NAO depende de custo cadastrado (taxa e dado real
+              gravado na venda — REL-006); lucro/margem dependem do custo. */}
+          {(summary!.totalFeeCents > 0 || summary!.estimatedProfitCents !== null) && (
             <div className="grid grid-cols-3 gap-3">
               {summary!.totalFeeCents > 0 && (
                 <SummaryCard
@@ -650,23 +664,47 @@ function SalesTab() {
                   hint="Descontado do lucro estimado"
                 />
               )}
-              <SummaryCard
-                label="Lucro Estimado"
-                value={formatCurrency(summary!.estimatedProfitCents ?? 0)}
-                icon={DollarSign}
-                hint="Receita menos custo e taxas"
-              />
-              <SummaryCard
-                label="Margem"
-                value={summary!.estimatedMarginPct !== null ? summary!.estimatedMarginPct + '%' : '--'}
-                icon={Percent}
-                hint="Percentual de lucro sobre a receita"
-              />
+              {summary!.estimatedProfitCents !== null && (
+                <>
+                  <SummaryCard
+                    label="Lucro Estimado"
+                    value={formatCurrency(summary!.estimatedProfitCents ?? 0)}
+                    icon={DollarSign}
+                    hint={
+                      summary!.costCoveragePct !== null && summary!.costCoveragePct < 100
+                        ? 'Base de custo parcial (' + summary!.costCoveragePct + '% dos itens)'
+                        : 'Receita menos custo e taxas'
+                    }
+                  />
+                  <SummaryCard
+                    label="Margem"
+                    value={summary!.estimatedMarginPct !== null ? summary!.estimatedMarginPct + '%' : '--'}
+                    icon={Percent}
+                    hint={
+                      summary!.costCoveragePct !== null && summary!.costCoveragePct < 100
+                        ? 'Estimativa parcial — veja o aviso abaixo'
+                        : 'Percentual de lucro sobre a receita'
+                    }
+                  />
+                </>
+              )}
             </div>
-          ) : (
+          )}
+          {summary!.estimatedProfitCents === null && (
             <div className="rounded-xl border border-dashed border-border bg-white/50 px-4 py-3 text-xs text-muted-foreground">
               Cadastre o <strong>preco de custo</strong> nos produtos em{' '}
               <strong>Cadastro de Produtos</strong> para ver lucro e margem estimados.
+            </div>
+          )}
+          {/* QA-078: aviso de cobertura parcial — sem isto, lucro/margem aparecem
+              inflados (receita de TODOS os itens menos custo de SO ALGUNS). */}
+          {summary!.estimatedProfitCents !== null &&
+            summary!.costCoveragePct !== null &&
+            summary!.costCoveragePct < 100 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" role="alert">
+              Apenas {summary!.costCoveragePct}% dos itens vendidos tem preco de custo cadastrado.
+              O lucro e a margem acima estao <strong>superestimados</strong> — cadastre o custo
+              nos demais produtos para ver numeros completos.
             </div>
           )}
 

@@ -19,6 +19,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const includeInactive = searchParams.get('includeInactive') === 'true'
 
     const machines = await prisma.cardMachine.findMany({
+      take: 200, // QA-083: limite de segurança — consistente com /api/categories (QA-047)
       where: includeInactive ? undefined : { isActive: true },
       orderBy: { name: 'asc' },
     })

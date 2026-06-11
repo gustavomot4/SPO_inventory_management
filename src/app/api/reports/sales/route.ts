@@ -112,20 +112,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const totalDiscount = activeSales.reduce((sum, s) => sum + s.discountCents, 0)
 
     // estimativa de custo -- baseada no custo atual do produto (nao e snapshot)
+    // QA-078: medir a COBERTURA de custo. A receita soma TODAS as vendas, mas o
+    // custo so soma itens cujo produto tem costCents — com cobertura parcial o
+    // lucro/margem saem inflados. costCoveragePct permite a UI avisar que a
+    // base de custo esta incompleta em vez de exibir o numero como se fosse pleno.
     let totalEstimatedCostCents = 0
     let hasAnyCostData = false
+    let totalItemUnits = 0
+    let itemUnitsWithCost = 0
 
     for (const sale of activeSales) {
       for (const item of sale.items) {
         const costPerUnit = item.variation.product.costCents ?? null
+        totalItemUnits += item.quantity
         if (costPerUnit !== null) {
           totalEstimatedCostCents += costPerUnit * item.quantity
+          itemUnitsWithCost += item.quantity
           hasAnyCostData = true
         }
       }
     }
 
     const estimatedCostCents = hasAnyCostData ? totalEstimatedCostCents : null
+    const costCoveragePct =
+      totalItemUnits > 0 ? Math.round((itemUnitsWithCost / totalItemUnits) * 100) : null
 
     // taxas de maquininha -- soma real gravada no momento da venda
     const totalFeeCents = activeSales.reduce((sum, s) => sum + (s.feeCents ?? 0), 0)
@@ -158,6 +168,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       feePercentage,
       truncated,
       totalSalesInPeriod,
+      costCoveragePct, // QA-078
     }
 
     // byPaymentMethod (apenas vendas ativas)

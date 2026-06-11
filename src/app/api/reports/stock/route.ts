@@ -101,6 +101,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const estimatedPotentialProfitCents =
       totalStockCostCents !== null ? totalStockValueCents - totalStockCostCents : null
 
+    // QA-078: % dos itens exibidos que tem custo cadastrado. O "Lucro Potencial"
+    // subtrai o custo SO desses itens do valor de TODO o estoque — com cobertura
+    // parcial o numero sai inflado. A UI usa isto para sinalizar base incompleta.
+    const costCoveragePct =
+      items.length > 0 ? Math.round((itemsWithCost.length / items.length) * 100) : null
+
     const meta: StockReportMeta = {
       total: items.length,
       outCount: items.filter((i) => i.status === 'out').length,
@@ -109,6 +115,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalStockValueCents,
       totalStockCostCents,
       estimatedPotentialProfitCents,
+      costCoveragePct, // QA-078
     }
 
     const response: StockReportSuccess = { data: items, meta }

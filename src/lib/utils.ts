@@ -44,6 +44,8 @@ export function formatCurrency(cents: number): string {
  * parseCurrencyToCents("59.90")        // → 5990   (ponto decimal, legado)
  * parseCurrencyToCents("59,90")        // → 5990   (vírgula decimal)
  * parseCurrencyToCents("100")          // → 10000
+ * parseCurrencyToCents("1.500")        // → 150000 (milhar pt-BR — QA-080)
+ * parseCurrencyToCents("0.50")         // → 50     (decimal, parte inteira 0)
  * parseCurrencyToCents("1.299,90")     // → 129990 (milhar + decimal BR)
  * parseCurrencyToCents("1.234.567,89") // → 123456789
  * parseCurrencyToCents("R$ 49,90")     // → 4990   (ignora símbolo/espaços)
@@ -67,8 +69,18 @@ export function parseCurrencyToCents(value: string): number {
     s = s.replace(',', '.')
   } else if (hasDot) {
     // Apenas ponto(s): mais de um ponto = separador de milhar ("1.234.567").
-    // Um único ponto é mantido como decimal ("59.90") por retrocompatibilidade.
-    if (((s.match(/\./g) || []).length) > 1) s = s.replace(/\./g, '')
+    if (((s.match(/\./g) || []).length) > 1) {
+      s = s.replace(/\./g, '')
+    } else {
+      // QA-080: um ÚNICO ponto seguido de exatamente 3 dígitos, com parte inteira
+      // não-zero, é separador de MILHAR pt-BR — "1.500" = R$ 1.500,00 (antes virava
+      // R$ 1,50: erro de 1000×). Ponto com 1-2 casas segue decimal ("59.90"), e
+      // "0.500" segue decimal (ninguém digita milhar com inteiro zero).
+      const thousand = s.match(/^(-?\d+)\.(\d{3})$/)
+      if (thousand && thousand[1] !== '0' && thousand[1] !== '-0') {
+        s = s.replace(/\./g, '')
+      }
+    }
   }
 
   const parsed = parseFloat(s)

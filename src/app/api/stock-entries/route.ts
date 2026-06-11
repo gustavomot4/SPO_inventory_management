@@ -84,6 +84,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Validar receivedAt (opcional — se fornecido deve ser ISO 8601 string e não data futura)
+    // QA-084: normalizar para ISO UTC antes de gravar. A coluna é TEXT e a
+    // ordenação/filtros comparam STRINGS — gravar o formato cru do cliente
+    // (ex: "2026-06-11" ou "Jan 5 2026") quebrava a ordem cronológica da lista.
+    let receivedAtIso: string | undefined
     if (receivedAt !== undefined && receivedAt !== null) {
       if (typeof receivedAt !== 'string' || isNaN(Date.parse(receivedAt as string))) {
         return NextResponse.json<ApiError>(
@@ -100,6 +104,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           { status: 400 }
         )
       }
+      receivedAtIso = receivedDate.toISOString()
     }
 
     // QA-031: toda verificacao e escrita ocorre DENTRO da transaction.
@@ -139,7 +144,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               quantity: quantity as number,
               unitCostCents: (unitCostCents as number | null | undefined) ?? null,
               notes: (notes as string | null | undefined) ?? null,
-              ...(receivedAt ? { receivedAt: receivedAt as string } : {}),
+              ...(receivedAtIso ? { receivedAt: receivedAtIso } : {}), // QA-084: ISO normalizado
             },
           })
 

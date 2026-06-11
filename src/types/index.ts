@@ -87,6 +87,9 @@ export type SettingsResponse = {
   phone: string | null
   updatedAt: string
   // Nota: pinHash NUNCA exposto
+  // QA-081: presente APENAS quando a requisicao tem sessao PIN verificada.
+  // false = sistema ainda no PIN padrao (APP_PIN/1234) — UI exibe aviso.
+  pinConfigured?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +284,9 @@ export type StockReportMeta = {
   totalStockValueCents: number
   totalStockCostCents: number | null
   estimatedPotentialProfitCents: number | null
+  // QA-078: % de itens exibidos que possuem costCents (0-100).
+  // null quando nao ha itens. Cobertura < 100 = custo/lucro PARCIAIS.
+  costCoveragePct: number | null
 }
 
 export type SalesReportSummary = {
@@ -300,6 +306,10 @@ export type SalesReportSummary = {
   // foi calculado apenas sobre uma amostra (totais subestimados).
   truncated: boolean
   totalSalesInPeriod: number      // total real de vendas no periodo (antes do limite)
+  // QA-078: % das unidades vendidas cujo produto tem costCents (0-100).
+  // null quando nao ha itens vendidos. Cobertura < 100 = lucro/margem calculados
+  // sobre base de custo INCOMPLETA (receita total - custo de parte dos itens).
+  costCoveragePct: number | null
 }
 
 export type SalesByPaymentMethod = {
