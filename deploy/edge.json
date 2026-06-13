@@ -1,8 +1,8 @@
 {
   "version": "v1.1.0",
-  "digest": null,
+  "digest": "sha256:f13dfbc874dceeec4655c898db99c8940071795a737d6af6f1166508eaf3600a",
   "breaking": false,
   "minSupported": "v1.1.0",
-  "publishedAt": null,
+  "publishedAt": "2026-06-13T00:29:49Z",
   "notes": "placeholder de bootstrap — atualizado automaticamente pelo workflow release.yml a cada tag vX.Y.Z."
 }
