@@ -7,12 +7,14 @@
 //   Paginas: /configuracoes, /relatorios
 //   APIs:    /api/settings (mutacoes), /api/reports, /api/card-machines (mutacoes),
 //            /api/categories, /api/products (mutacoes), /api/stock-entries (GET),
-//            /api/sales (lista), /api/sales/:id/cancel
+//            /api/sales/:id/cancel
 //
 // Excecoes publicas (sem PIN):
 //   GET  /api/settings        — comanda e dashboard leem sem PIN
 //   GET  /api/products/*      — PDV (vendas/nova) precisa listar produtos sem autenticar
 //   GET  /api/card-machines/* — PDV precisa listar maquininhas/parcelas p/ venda em cartao — QA-071
+//   GET  /api/sales           — historico de vendas e area aberta (decisao do cliente
+//                               2026-06-12; reverte QA-041 — taxa segue oculta sem PIN)
 //   GET  /api/sales/[id]      — detalhe de venda para impressão da comanda após criar venda
 //   POST /api/sales           — registrar venda é área aberta (ADR-003 / RN-007.2) — QA-061
 //   POST /api/stock-entries   — entrada de estoque é área aberta (ADR-003) — QA-063
@@ -51,8 +53,18 @@ export async function middleware(request: NextRequest) {
 
   // GET /api/sales/[id] e publico — tela de detalhe e comanda carregam sem PIN
   // (a projecao publica omite taxa/maquininha — ver QA-064 no handler)
-  // GET /api/sales (lista) e GET /api/sales com filtros EXIGEM PIN (dados financeiros)
   if (pathname.match(/^\/api\/sales\/[^\/]+$/) && method === 'GET') {
+    return NextResponse.next()
+  }
+
+  // DECISAO DO CLIENTE (2026-06-12): a tela de Vendas (/vendas, historico) e
+  // AREA ABERTA — sem PIN. Reverte parcialmente o QA-041 (que protegia a lista
+  // por expor faturamento) por decisao explicita do dono do projeto; alinha com
+  // a RN-007.4, que so preve PIN em RELATORIOS e CONFIGURACOES. A projecao
+  // publica do handler omite taxa/maquininha sem sessao (padrao QA-064).
+  // Mutacao destrutiva continua protegida: POST /api/sales/:id/cancel exige PIN
+  // (QA-008 / FLUXO-007 — cancelamento e acao da dona).
+  if (pathname === '/api/sales' && method === 'GET') {
     return NextResponse.next()
   }
 
@@ -108,7 +120,7 @@ export const config = {
     '/api/categories/:path*',
     '/api/products/:path*',
     '/api/stock-entries/:path*',
-    '/api/sales',        // QA-041: GET /api/sales (lista) — dados financeiros exigem PIN
-    '/api/sales/:path*', // QA-041: cobre /api/sales/:id/cancel e subrotas (exceto GET /[id] — ver logica acima)
+    '/api/sales',        // POST e publico (QA-061) e GET e publico (decisao do cliente 2026-06-12) — excecoes na logica acima
+    '/api/sales/:path*', // cobre /api/sales/:id/cancel (PIN — QA-008); GET /[id] e publico via logica acima
   ],
 }

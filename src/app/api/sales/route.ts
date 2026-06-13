@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isPinVerified } from '@/lib/pin-session'
 import {
   MOVEMENT_TYPE, SALE_STATUS, PAYMENT_METHOD,
   CARD_PAYMENT_METHODS, PAYMENT_METHOD_LABELS,
@@ -386,12 +387,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (hasNextPage) sales.pop()
     const lastItem = sales.at(-1)
 
+    // DECISAO DO CLIENTE (2026-06-12): GET /api/sales virou area aberta (sem PIN).
+    // Padrao QA-064/COM-007 mantido: taxa e maquininha sao dado INTERNO — so
+    // aparecem com sessao PIN verificada. A tela /vendas nao exibe esses campos,
+    // entao a projecao publica nao muda nada visivel.
+    const showInternal = await isPinVerified(request)
+
     const data: SaleListItem[] = sales.map(s => ({
       id: s.id, status: s.status, paymentMethod: s.paymentMethod,
       paymentMethodLabel: PAYMENT_METHOD_LABELS[s.paymentMethod as PaymentMethod] ?? s.paymentMethod,
       subtotalCents: s.subtotalCents, discountCents: s.discountCents, totalCents: s.totalCents,
-      cardMachineName: s.cardMachine?.name ?? null,
-      feeCents: s.feeCents, itemCount: s._count.items,
+      cardMachineName: showInternal ? (s.cardMachine?.name ?? null) : null,
+      feeCents: showInternal ? s.feeCents : null,
+      itemCount: s._count.items,
       installments: s.installments, createdAt: s.createdAt,
     }))
 
