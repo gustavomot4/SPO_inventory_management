@@ -122,7 +122,7 @@ export function SidebarContent() {
       {/* Rodapé da sidebar */}
       <div className="shrink-0 border-t border-border p-3">
         <p className="text-[10px] text-muted-foreground text-center">
-          SPO v0.1.0-MVP
+          SPO v1.1.0
         </p>
       </div>
     </div>

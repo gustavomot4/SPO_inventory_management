@@ -19,6 +19,13 @@
 //   POST /api/sales           — registrar venda é área aberta (ADR-003 / RN-007.2) — QA-061
 //   POST /api/stock-entries   — entrada de estoque é área aberta (ADR-003) — QA-063
 //
+// ⚠️ REGRA FIXA (decisão do cliente, 2026-06-12): a TELA DE VENDAS (/vendas e
+//   /vendas/nova) é ÁREA ABERTA — NÃO pede PIN para entrar. NÃO adicionar '/vendas'
+//   ao matcher abaixo, NÃO exigir PIN em GET/POST /api/sales. Pelo RN-007.4, apenas
+//   Relatórios e Configurações pedem PIN. A ÚNICA exceção em vendas é o cancelamento
+//   (POST /api/sales/:id/cancel), que continua sob PIN (QA-008). Não "reintroduzir"
+//   proteção em Vendas mesmo que algum relatório antigo de QA (QA-041) sugira.
+//
 // NOTA (verificado no Next 14): um matcher '/api/x/:path*' casa TAMBEM o caminho
 // base '/api/x' (sem segmento extra). Toda excecao de caminho base precisa ser
 // explicita na logica abaixo — nao confiar no matcher para isso.
@@ -27,7 +34,9 @@
 // QA-008: cancelamento de venda e operacao destrutiva — exige PIN
 // QA-034: produtos (PATCH/DELETE/POST) e stock-entries (POST) exigem PIN —
 //         qualquer pessoa na rede local poderia alterar precos ou inativar produtos
-// QA-041: GET /api/sales (lista financeira) exige PIN — expunha faturamento sem autenticacao
+// QA-041 (REVERTIDO em 2026-06-12): GET /api/sales chegou a exigir PIN por expor
+//         faturamento, mas o CLIENTE decidiu reverter — a lista/histórico de vendas
+//         e ÁREA ABERTA. Mantido aqui apenas como histórico. NÃO reprotejer.
 // QA-071: leitura de maquininhas liberada — sem isso a vendedora sem PIN via o
 //         dropdown de maquininha vazio e NAO CONSEGUIA vender em cartao (a
 //         abertura do QA-061 ficava pela metade). Mutacoes continuam sob PIN.

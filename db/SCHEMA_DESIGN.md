@@ -1,9 +1,9 @@
 # Schema Design — SPO (Sistema Pimenta Ousada)
 
 > **Agente:** Database Agent
-> **Histórico de tasks:** DOC-012 → MVP-004 → DT-004 → DT-005
-> **Versão atual do schema:** 2.2
-> **Última atualização:** 2026-05-27
+> **Histórico de tasks:** DOC-012 → MVP-004 → DT-004 → DT-005 → DT-007/PROD-007 → DT-010
+> **Versão atual do schema:** 2.4
+> **Última atualização:** 2026-05-29 (ver histórico de versões abaixo)
 
 ---
 
@@ -99,7 +99,7 @@ Settings (singleton)
 
 ### 2.4 Soft delete em Product
 
-**Decisão:** Produtos inativados usam `deletedAt DateTime?` (null = ativo) em vez de exclusão real.
+**Decisão:** Produtos inativados usam `deletedAt String?` (ISO 8601; null = ativo) em vez de exclusão real. *(O tipo é `String?`, não `DateTime?` — ver decisão 2.6 sobre timestamps.)*
 
 **Justificativa:** Regra RN-001.4 — produtos inativados não são excluídos. O histórico de vendas referencia `variationId`, que referencia `productId`. Excluir o produto quebraria a integridade referencial com `SaleItem` e `StockMovement`. Com soft delete, o histórico permanece intacto.
 
@@ -149,7 +149,7 @@ Esse bug se manifesta na primeira operação de UPDATE em qualquer tabela.
 **Fix:**
 - Campos `createdAt`/`updatedAt`/`receivedAt` → `String @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"))`
 - Campos nullable (`deletedAt`, `cancelledAt`) → `String?` sem default, gerenciados pela aplicação como string ISO 8601
-- `@updatedAt` é removido (não funciona com `String`) — o campo `updated_at` é mantido atualizado pelos triggers SQL da migration `20260528000001_add_cost_cents_and_triggers`
+- `@updatedAt` é removido (não funciona com `String`) — o campo `updated_at` é mantido atualizado pelos triggers SQL da migration `20260528000001_init_v3`
 
 **Formato:** Todos os timestamps são strings ISO 8601 com timezone UTC, ex: `"2026-05-28T14:23:11.000Z"`.
 
@@ -241,7 +241,7 @@ Error validating: You defined the enum `SaleStatus`. But the current connector d
 
 ---
 
-### 2.7 Relação StockEntry ↔ StockMovement (1:1)
+### 2.13 Relação StockEntry ↔ StockMovement (1:1)
 
 **Decisão:** Cada `StockEntry` gera exatamente um `StockMovement` do tipo `ENTRY`. A relação é modelada com `stockEntryId @unique` em `StockMovement`.
 
@@ -249,7 +249,7 @@ Error validating: You defined the enum `SaleStatus`. But the current connector d
 
 ---
 
-### 2.8 CardMachine — maquininhas de cartão (MVP-004)
+### 2.14 CardMachine — maquininhas de cartão (MVP-004)
 
 **Decisão:** Maquininhas de cartão são entidades cadastradas (`CardMachine`) com nome e taxa em basis points. Uma `Sale` com `paymentMethod = 'DEBIT'` ou `'CREDIT'` deve ter `cardMachineId` não-null.
 
@@ -264,7 +264,7 @@ CHECK (
 
 ---
 
-### 2.9 Settings — singleton de configurações (MVP-004)
+### 2.15 Settings — singleton de configurações (MVP-004)
 
 **Decisão:** Um único registro na tabela `settings` armazena configurações globais: nome da loja e hash do PIN.
 
@@ -274,7 +274,7 @@ CHECK (
 
 ---
 
-### 2.10 IDs via cuid()
+### 2.16 IDs via cuid()
 
 **Decisão:** Todos os IDs são `String @id @default(cuid())`.
 
@@ -282,7 +282,7 @@ CHECK (
 
 ---
 
-### 2.11 @map e @@map — convenção de nomes (DT-004)
+### 2.17 @map e @@map — convenção de nomes (DT-004)
 
 **Decisão:** Todos os campos camelCase têm `@map("snake_case")`. Todos os models têm `@@map("snake_case_plural")`.
 
@@ -496,7 +496,7 @@ const alertas = await prisma.$queryRaw`
 
 | Ponto | Impacto | Quando resolver |
 |---|---|---|
-| OPEN-009: cartão parcelado | Se necessário, adicionar `installments Int?` e `installmentValueCents Int?` em `Sale` | Sprint de vendas |
+| ~~OPEN-009: cartão parcelado~~ ✅ RESOLVIDO | Implementado (DT-010 / VEND-007): `Sale.installments Int @default(1)`, `Sale.installmentFeeBasisPoints Int?` e a tabela `CardMachineInstallment` (taxa por nº de parcelas). Ver seções 2.10 e 2.11. | Concluído |
 | OPEN-012: cadastro de clientes | Novo model `Customer` com relação 1:N com `Sale` | v1.1 |
 | OPEN-013: acessórios além de roupas | `size` pode ser `null` ou ter valor livre para acessórios | Sprint de produtos |
 | DT-003: seed do Settings singleton | Criar registro inicial de settings com `shopName` e `pinHash = null` | MVP-005 |
@@ -535,4 +535,4 @@ const alertas = await prisma.$queryRaw`
 >
 > Em 2026-05-27, o Frontend Agent reverteu ambos os arquivos para a versão DOC-012 (v1.0), desfazendo o trabalho das tasks MVP-004 e DT-004. Isso causou falha no `npx prisma generate` com erros de enum não suportado (P1012).
 >
-> **Nenhum outro agente deve modificar esses arquivos.** Se precisar de alterações no schema, comunicar ao Database Agent via z_next_task.md para que a mudança seja feita corretamente com migration correspondente.
+> **Nenhum outro agente deve modificar esses arquivos.** Se precisar de alterações no schema, comunicar ao Database Agent via `historico/z_next_task.md` (pasta de documentação) para que a mudança seja feita corretamente com migration correspondente.

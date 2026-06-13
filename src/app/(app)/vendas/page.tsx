@@ -122,7 +122,9 @@ export default function VendasPage() {
     if (opts.cursorParam) params.set('cursor', opts.cursorParam)
 
     const res = await fetch(`/api/sales?${params}`)
-    // QA-049: PIN expirou — redirecionar em vez de lista vazia silenciosa
+    // A tela de Vendas é ÁREA ABERTA — sem PIN para entrar. GET /api/sales é público
+    // (decisão do cliente 2026-06-12). Este 401 é só uma rede de segurança defensiva
+    // e, na prática, NÃO dispara. NÃO transformar /vendas em rota protegida por PIN.
     if (res.status === 401) { window.location.href = '/pin?redirect=/vendas'; return }
     const json: ApiSuccess<SaleListItem[]> = await res.json()
     if (!('data' in json)) return

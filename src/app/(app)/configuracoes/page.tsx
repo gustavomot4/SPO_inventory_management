@@ -3,12 +3,13 @@
 // SPO — Sistema Pimenta Ousada
 // =============================================================================
 //
-// 'use client': CRUD inline de maquininhas, state local.
+// 'use client': CRUD inline, state local. Integra com /api/card-machines,
+// /api/settings e /api/auth/pin/change.
 //
-// Seções:
-//   - Maquininhas de Cartão  ← implementada
-//   - Segurança (PIN)        ← placeholder "Em breve"
-//   - Dados da Loja          ← placeholder "Em breve"
+// Seções (todas implementadas):
+//   - Maquininhas de Cartão  ← CRUD + taxas de parcelamento (CardMachineInstallment)
+//   - Dados da Loja          ← nome, endereço e telefone (exibidos na comanda — DT-010/COM-006)
+//   - Segurança (PIN)        ← troca de PIN de 4 dígitos (SEC-001) + aviso quando ainda no PIN padrão 1234 (QA-081)
 // =============================================================================
 
 'use client'
