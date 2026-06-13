@@ -89,6 +89,28 @@ if exist "%~dp0deploy\spo-updater.ps1" (
 )
 
 :: -------------------------------------------------------
+:: 2.6 GITOPS-006: Tarefa Agendada (update diario 18h30) — auto-instala na 1a vez.
+::     Tarefa do usuario atual; no uso normal NAO exige admin. Roda so uma vez:
+::     nas proximas o schtasks /Query ja encontra a tarefa e este bloco e pulado.
+::     Se falhar, o update no boot (secao 2.5) continua funcionando do mesmo jeito.
+:: -------------------------------------------------------
+if not exist "%~dp0deploy\spo-updater.ps1" goto spo_task_ok
+schtasks /Query /TN "SPO Atualizacao Automatica" >nul 2>nul
+if not errorlevel 1 goto spo_task_ok
+echo [INFO] Configurando atualizacao automatica diaria (18h30) pela primeira vez...
+schtasks /Create /F /TN "SPO Atualizacao Automatica" /SC DAILY /ST 18:30 /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0deploy\spo-updater.ps1\" -Mode scheduled" >nul 2>nul
+if errorlevel 1 (
+    echo [AVISO] Nao foi possivel criar a tarefa diaria automaticamente.
+    echo         O update no boot segue funcionando normalmente. Para ativar a
+    echo         verificacao das 18h30, rode uma vez como administrador:
+    echo         deploy\instalar-atualizacao-automatica.bat
+) else (
+    echo [OK] Atualizacao automatica diaria configurada.
+)
+:spo_task_ok
+echo.
+
+:: -------------------------------------------------------
 :: 3. Detectar primeira execucao
 ::    Checa o volume do banco — criado apenas na 1a execucao.
 ::    Nao usa o nome da imagem pois o docker compose gera
