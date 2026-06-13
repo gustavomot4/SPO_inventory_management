@@ -13,6 +13,12 @@ import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
+// GITOPS-001: a versao vem do build da imagem (Dockerfile ARG SPO_VERSION,
+// injetado pelo CI na release). Fora do Docker (dev), cai em 'dev'.
+// O spo-updater usa este campo para confirmar que a versao alvo subiu.
 export async function GET(): Promise<NextResponse> {
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({
+    ok: true,
+    version: process.env.SPO_VERSION ?? 'dev',
+  })
 }

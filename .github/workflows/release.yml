@@ -1,0 +1,112 @@
+# =============================================================================
+# release.yml — CI de release (GITOPS-002)
+# SPO — Sistema Pimenta Ousada
+# =============================================================================
+#
+# Gatilho: push de tag vX.Y.Z (SemVer).
+# Faz: portao de qualidade (typecheck) -> build da imagem Docker (multi-stage
+# existente) -> push para ghcr.io/gustavomot4/spo:vX.Y.Z -> publica a versao
+# no canal EDGE (deploy/edge.json, commitado em main com o digest da imagem).
+#
+# A promocao para STABLE e MANUAL (workflow promote.yml) — portao humano
+# enquanto o projeto nao tem suite de testes automatizada (plano GitOps, sec. 5).
+#
+# Requisito unico de configuracao no GitHub: nenhum secret extra.
+# GITHUB_TOKEN ja autentica no GHCR (permissions: packages: write).
+# Apos a PRIMEIRA release: tornar o package "spo" PUBLICO em
+# github.com/users/gustavomot4/packages (pull anonimo nas lojas) — ver RUNBOOK.
+# =============================================================================
+
+name: Release (build + publish edge)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  IMAGE: ghcr.io/gustavomot4/spo
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # commit do deploy/edge.json em main
+      packages: write   # push da imagem no GHCR
+
+    steps:
+      - name: Checkout (tag)
+        uses: actions/checkout@v4
+
+      # ----- Portao de qualidade minimo -----------------------------------
+      # (quando existir suite de testes, adicionar aqui como pre-condicao)
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --legacy-peer-deps
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # ----- Build + push da imagem ----------------------------------------
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build e push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.ref_name }}
+          build-args: |
+            SPO_VERSION=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ----- Publicar no canal EDGE (manifesto declarativo) ----------------
+      - name: Checkout main (para commitar o manifesto)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-branch
+
+      - name: Atualizar deploy/edge.json
+        env:
+          VERSION: ${{ github.ref_name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cd main-branch
+          # preserva minSupported/breaking atuais; atualiza versao/digest/data
+          jq --arg v "$VERSION" \
+             --arg d "$DIGEST" \
+             --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+             '.version = $v | .digest = $d | .publishedAt = $t | .breaking = false' \
+             deploy/edge.json > deploy/edge.json.tmp
+          mv deploy/edge.json.tmp deploy/edge.json
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/edge.json
+          git commit -m "ci: publica ${VERSION} no canal edge [skip ci]"
+          git push origin main
+
+      - name: Resumo
+        run: |
+          echo "## Release ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Imagem: \`${{ env.IMAGE }}:${{ github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${{ steps.build.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Canal: **edge** (promova para stable com o workflow 'Promote to stable')" >> "$GITHUB_STEP_SUMMARY"

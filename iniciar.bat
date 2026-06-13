@@ -77,6 +77,18 @@ echo [OK] Docker esta em execucao.
 echo.
 
 :: -------------------------------------------------------
+:: 2.5 GITOPS-006: verificar/aplicar atualizacao automatica
+::     Pull-based: le deploy/stable.json no GitHub. Sem internet,
+::     sai em ~5 segundos sem erro e o sistema sobe na versao atual.
+::     Log de auditoria: deploy\updates.log
+:: -------------------------------------------------------
+if exist "%~dp0deploy\spo-updater.ps1" (
+    echo [INFO] Verificando atualizacoes do sistema...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\spo-updater.ps1" -Mode boot
+    echo.
+)
+
+:: -------------------------------------------------------
 :: 3. Detectar primeira execucao
 ::    Checa o volume do banco — criado apenas na 1a execucao.
 ::    Nao usa o nome da imagem pois o docker compose gera
@@ -104,14 +116,24 @@ if !FIRST_RUN! equ 1 (
 :: 5. Iniciar containers
 :: -------------------------------------------------------
 if !FIRST_RUN! equ 1 (
-    echo [INFO] Construindo o sistema pela primeira vez...
+    echo [INFO] Preparando o sistema pela primeira vez...
     echo       Isso pode levar varios minutos. Acompanhe no browser.
 ) else (
     echo [INFO] Iniciando containers...
 )
 echo.
 
-%DOCKER_CMD% compose up -d --build
+:: GITOPS-003: a imagem vem pronta do GHCR (sem --build). A versao e pinada
+:: pela variavel SPO_VERSION no arquivo .env (gerenciada pelo spo-updater).
+%DOCKER_CMD% compose up -d
+
+if %errorlevel% neq 0 (
+    echo.
+    echo [AVISO] Nao foi possivel baixar a imagem pronta do sistema.
+    echo         Tentando construir localmente - pode levar varios minutos...
+    echo.
+    %DOCKER_CMD% compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+)
 
 if %errorlevel% neq 0 (
     echo.
@@ -123,7 +145,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo [OK] Sistema iniciado. O browser abrira quando estiver pronto.
-echo      Para encerrar: execute parar.bat
+echo      Atualizacoes sao automaticas (log em deploy\updates.log).
 echo.
 pause
 exit /b 0

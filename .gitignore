@@ -28,6 +28,12 @@ build/
 # Backups automaticos — ficam apenas na maquina local, nunca no repositorio
 backups/
 
+# GitOps (GITOPS-005) — estado local da maquina, nunca no repositorio
+deploy/updater.lock
+deploy/channel
+deploy/*.new
+docker-compose.yml.bak
+
 # Prisma
 prisma/migrations/dev/
 

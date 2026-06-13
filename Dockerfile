@@ -40,6 +40,12 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
+# GITOPS-001: versao da release embutida na imagem pelo CI
+# (--build-arg SPO_VERSION=vX.Y.Z). Exposta em GET /api/health e usada pelo
+# spo-updater para confirmar que a versao nova de fato subiu.
+ARG SPO_VERSION=dev
+ENV SPO_VERSION=$SPO_VERSION
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000

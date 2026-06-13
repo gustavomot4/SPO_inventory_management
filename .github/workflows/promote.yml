@@ -1,0 +1,76 @@
+# =============================================================================
+# promote.yml — Promocao manual edge -> stable (GITOPS-004)
+# SPO — Sistema Pimenta Ousada
+# =============================================================================
+#
+# Portao humano do GitOps: as maquinas da loja so seguem deploy/stable.json.
+# Rodar manualmente (Actions -> "Promote to stable" -> Run workflow) APOS
+# validar a versao do canal edge numa maquina de teste.
+#
+# Inputs:
+#   version  — deve ser IGUAL a versao atual de deploy/edge.json (confirmacao)
+#   breaking — true se a release contem migration INCOMPATIVEL com a versao
+#              anterior (muda o comportamento de rollback do spo-updater:
+#              em falha, restaura o backup pre-update em vez de so trocar imagem)
+# =============================================================================
+
+name: Promote to stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versao a promover (ex: v1.2.0) — deve ser a versao atual do canal edge'
+        required: true
+        type: string
+      breaking:
+        description: 'Release contem migration incompativel com a versao anterior?'
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Validar e promover
+        env:
+          VERSION: ${{ inputs.version }}
+          BREAKING: ${{ inputs.breaking }}
+        run: |
+          EDGE_VERSION=$(jq -r '.version' deploy/edge.json)
+          if [ "$EDGE_VERSION" != "$VERSION" ]; then
+            echo "::error::Versao informada ($VERSION) difere do canal edge ($EDGE_VERSION). Abortando."
+            exit 1
+          fi
+          DIGEST=$(jq -r '.digest' deploy/edge.json)
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "null" ]; then
+            echo "::error::edge.json sem digest — a release foi publicada pelo workflow de release?"
+            exit 1
+          fi
+          # stable herda o minSupported atual do proprio stable (politica: so
+          # aumentar minSupported deliberadamente, editando o arquivo via PR)
+          MIN_SUPPORTED=$(jq -r '.minSupported' deploy/stable.json)
+          jq -n \
+            --arg v "$VERSION" \
+            --arg d "$DIGEST" \
+            --arg m "$MIN_SUPPORTED" \
+            --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson b "$BREAKING" \
+            '{version:$v, digest:$d, breaking:$b, minSupported:$m, publishedAt:$t, notes:"promovido do canal edge"}' \
+            > deploy/stable.json
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/stable.json
+          git commit -m "ops: promove ${VERSION} para stable (breaking=${BREAKING}) [skip ci]"
+          git push origin main
+          echo "## ${VERSION} promovido para STABLE (breaking=${BREAKING})" >> "$GITHUB_STEP_SUMMARY"
+          echo "As maquinas da loja atualizam no proximo boot ou na janela das 18h30." >> "$GITHUB_STEP_SUMMARY"

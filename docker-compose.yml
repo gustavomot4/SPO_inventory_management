@@ -1,8 +1,13 @@
 services:
   spo:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # GITOPS-003: a loja roda IMAGEM PRE-CONSTRUIDA do GHCR, com versao PINADA.
+    # SPO_VERSION vem do arquivo .env ao lado deste compose (gerenciado pelo
+    # spo-updater) e pode ser "vX.Y.Z" ou "vX.Y.Z@sha256:..." (pin por digest).
+    # Nunca usar "latest" — atualizacao e decidida pelo manifesto deploy/stable.json.
+    #
+    # Desenvolvimento (build local): use o override —
+    #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+    image: ghcr.io/gustavomot4/spo:${SPO_VERSION:-v1.1.0}
     container_name: spo-pimenta-ousada
     restart: unless-stopped
     ports:

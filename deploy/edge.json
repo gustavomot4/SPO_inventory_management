@@ -1,0 +1,8 @@
+{
+  "version": "v1.1.0",
+  "digest": null,
+  "breaking": false,
+  "minSupported": "v1.1.0",
+  "publishedAt": null,
+  "notes": "placeholder de bootstrap — atualizado automaticamente pelo workflow release.yml a cada tag vX.Y.Z."
+}

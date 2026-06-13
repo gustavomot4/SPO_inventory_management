@@ -1,0 +1,23 @@
+# =============================================================================
+# docker-compose.dev.yml — override de DESENVOLVIMENTO (GITOPS-003)
+# SPO — Sistema Pimenta Ousada
+# =============================================================================
+#
+# O docker-compose.yml principal usa imagem pre-construida do GHCR (producao).
+# Este override devolve o build local para desenvolvimento e para o BOOTSTRAP
+# (antes da primeira release publicada no GHCR):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# A imagem buildada localmente recebe a mesma tag que o compose principal
+# espera — assim um "up" subsequente sem o override continua funcionando.
+# =============================================================================
+
+services:
+  spo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SPO_VERSION: ${SPO_VERSION:-v1.1.0}
+    image: ghcr.io/gustavomot4/spo:${SPO_VERSION:-v1.1.0}
