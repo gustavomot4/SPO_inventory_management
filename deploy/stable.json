@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.0",
-  "digest": null,
+  "version": "v1.1.2",
+  "digest": "sha256:900b500adac798df9c3fb3fc971df91df6f574cdf4b5ab3e355c69f76800c5f5",
   "breaking": false,
   "minSupported": "v1.1.0",
-  "publishedAt": null,
-  "notes": "placeholder de bootstrap — sera substituido pela primeira promocao (workflow promote.yml). digest null = updater puxa pela tag."
+  "publishedAt": "2026-06-30T18:41:24Z",
+  "notes": "promovido do canal edge"
 }
