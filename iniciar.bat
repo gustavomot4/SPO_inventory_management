@@ -125,14 +125,18 @@ if %errorlevel% neq 0 (
 
 :: -------------------------------------------------------
 :: 4. Abrir tela de carregamento
+::    loading.html e unico e tem os dois modos (primeira vez /
+::    reinicio). O modo e passado via loading_mode.js, gerado
+::    aqui a cada abertura (estado local, fora do git).
 :: -------------------------------------------------------
 if !FIRST_RUN! equ 1 (
     echo [INFO] Primeira execucao detectada.
-    start "" "%~dp0loading_primeira_vez.html"
+    >"%~dp0loading_mode.js" echo window.SPO_FIRST_RUN=1;
 ) else (
     echo [INFO] Reiniciando o sistema...
-    start "" "%~dp0loading.html"
+    >"%~dp0loading_mode.js" echo window.SPO_FIRST_RUN=0;
 )
+start "" "%~dp0loading.html"
 
 :: -------------------------------------------------------
 :: 5. Iniciar containers

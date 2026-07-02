@@ -17,7 +17,7 @@ export function cn(...inputs: ClassValue[]) {
 // ---------------------------------------------------------------------------
 // FORMATAÇÃO DE MOEDA
 // Todos os valores monetários no banco são armazenados em CENTAVOS (Int).
-// Referência: SCHEMA_DESIGN.md seção 2.1
+// Referência: docs/a_schema_design.md seção 2.1
 // ---------------------------------------------------------------------------
 
 /**
@@ -129,7 +129,7 @@ export function formatDateTime(date: Date): string {
 // ---------------------------------------------------------------------------
 // STATUS DE ESTOQUE
 // Centraliza a lógica de classificação de estoque (usada em queries e UI)
-// Referência: SCHEMA_DESIGN.md seção 9 — status de estoque por variação
+// Referência: docs/a_schema_design.md seção 9 — status de estoque por variação
 // ---------------------------------------------------------------------------
 
 export type StockStatus = 'ok' | 'low' | 'out'

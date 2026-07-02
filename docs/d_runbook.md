@@ -1,7 +1,7 @@
 # RUNBOOK — Atualizações automáticas (GitOps) — SPO
 
 > **Para quem opera o projeto** (não é para a dona da loja — para ela nada muda: abrir o
-> sistema pelo atalho como sempre). Referência completa: `77777777_SPO_Project_DOCs/plano/plano_gitops_atualizacoes.md` e ADR-005.
+> sistema pelo atalho como sempre). Referência completa: `77777777_SPO_Project_DOCs/b_plano/c_plano_gitops_atualizacoes.md` e ADR-005.
 
 ---
 

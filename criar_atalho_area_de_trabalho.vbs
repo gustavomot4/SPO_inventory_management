@@ -1,5 +1,5 @@
 ' ============================================================
-' Criar Atalho na Area de Trabalho.vbs
+' criar_atalho_area_de_trabalho.vbs
 ' Pimenta Ousada — Sistema de Gestao de Estoque
 ' ============================================================
 ' Execute este arquivo UMA vez para criar o atalho clicavel

@@ -131,7 +131,7 @@ npx prisma studio
 
 ## Atualizações Automáticas (GitOps)
 
-Desde a v1.1.0 o sistema se atualiza sozinho via **pull do GHCR** — não é necessário `git pull` nem rebuild manual na máquina da loja. Visão geral (detalhes completos em `deploy/RUNBOOK.md`):
+Desde a v1.1.0 o sistema se atualiza sozinho via **pull do GHCR** — não é necessário `git pull` nem rebuild manual na máquina da loja. Visão geral (detalhes completos em `d_runbook.md`):
 
 1. **CI (`.github/workflows/release.yml`)**: a cada tag `vX.Y.Z`, builda e publica a imagem em `ghcr.io/gustavomot4/spo:vX.Y.Z` (com digest) e atualiza `deploy/edge.json` (canal de testes).
 2. **Promoção (`.github/workflows/promote.yml`)**: workflow manual "Promote to stable" copia a versão validada de `edge.json` para `deploy/stable.json` — este é o portão humano antes de qualquer loja receber a versão.
@@ -144,7 +144,7 @@ Desde a v1.1.0 o sistema se atualiza sozinho via **pull do GHCR** — não é ne
    - **falha** → rollback automático para a versão anterior; se a release for `breaking: true`, também restaura o backup do banco.
 4. **Offline**: sem internet, o updater desiste em ~5s e o sistema sobe normalmente na versão atual (preserva o requisito de funcionamento local — RT-001).
 
-Rollback manual, restauração de backup e troubleshooting: ver `deploy/RUNBOOK.md`.
+Rollback manual, restauração de backup e troubleshooting: ver `d_runbook.md` (nesta pasta).
 
 ---
 
@@ -159,7 +159,7 @@ git tag v1.2.0
 git push origin main --tags
 ```
 
-A tag dispara `.github/workflows/release.yml`, que builda, publica a imagem no GHCR e atualiza `deploy/edge.json`. Depois de validar no canal edge, rode o workflow manual **"Promote to stable"** para liberar a versão às lojas. Migrations devem seguir a política *expand/contract* (aditivas primeiro; remoções só numa release seguinte) — ver `deploy/RUNBOOK.md` e ADR-005.
+A tag dispara `.github/workflows/release.yml`, que builda, publica a imagem no GHCR e atualiza `deploy/edge.json`. Depois de validar no canal edge, rode o workflow manual **"Promote to stable"** para liberar a versão às lojas. Migrations devem seguir a política *expand/contract* (aditivas primeiro; remoções só numa release seguinte) — ver `d_runbook.md` e ADR-005.
 
 ---
 
@@ -204,15 +204,15 @@ SPO_inventory_management/
 ├── .gitattributes              # Garante LF em .sh (evita CRLF quebrando Linux)
 ├── iniciar.bat                 # Launcher Windows (Docker + verificação de atualização + abre browser)
 ├── iniciar.sh                  # Atalho de desenvolvimento em modo Node (Linux/Mac)
-├── loading.html                # Tela de carregamento — reinício (~15s)
-├── loading_primeira_vez.html   # Tela de carregamento — primeira vez (~10min)
+├── loading.html                # Tela de carregamento única — modos reinício (~15s) e primeira vez (~10min)
+├── loading_mode.js             # Modo da tela — gerado pelo iniciar.bat a cada abertura (fora do git)
 ├── next.config.mjs             # output: 'standalone' (obrigatório para Docker)
 ├── deploy/
 │   ├── edge.json               # Manifesto do canal de testes (CI)
 │   ├── stable.json             # Manifesto do canal das lojas (promoção manual)
 │   ├── spo-updater.ps1         # Agente de atualização GitOps
-│   ├── instalar-atualizacao-automatica.bat  # Cria a Tarefa Agendada (18h30)
-│   └── RUNBOOK.md               # Guia operacional
+│   └── instalar-atualizacao-automatica.bat  # Cria a Tarefa Agendada (18h30)
+├── docs/                       # Documentação (a_schema_design, b_deployment, c_guia_gitops, d_runbook, e_teste_gitops_e2e, f_roteiro_apresentacao)
 ├── .github/workflows/
 │   ├── release.yml             # build + push GHCR + atualiza edge.json
 │   └── promote.yml             # "Promote to stable" (manual)

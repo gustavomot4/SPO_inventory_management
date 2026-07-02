@@ -525,14 +525,14 @@ const alertas = await prisma.$queryRaw`
    - `stockQuantity > 0 && stockQuantity <= minStock` → ⚠️ Alerta
    - `stockQuantity === 0` → 🚫 Zerado
 5. **Campo `paymentMethod`:** exibir labels em português (ex: `CASH` → "Dinheiro", `PIX` → "Pix", `DEBIT` → "Débito", `CREDIT` → "Crédito")
-6. **NUNCA modificar `prisma/schema.prisma` ou `db/schema.prisma`** — esses arquivos são responsabilidade exclusiva do Database Agent
+6. **NUNCA modificar `prisma/schema.prisma`** — esses arquivos são responsabilidade exclusiva do Database Agent
 
 ---
 
 ## 10. Aviso para todos os agentes — proteção do schema
 
-> ⚠️ **Os arquivos `prisma/schema.prisma` e `db/schema.prisma` são de responsabilidade EXCLUSIVA do Database Agent.**
+> ⚠️ **O arquivo `prisma/schema.prisma` é de responsabilidade EXCLUSIVA do Database Agent.**
 >
 > Em 2026-05-27, o Frontend Agent reverteu ambos os arquivos para a versão DOC-012 (v1.0), desfazendo o trabalho das tasks MVP-004 e DT-004. Isso causou falha no `npx prisma generate` com erros de enum não suportado (P1012).
 >
-> **Nenhum outro agente deve modificar esses arquivos.** Se precisar de alterações no schema, comunicar ao Database Agent via `historico/z_next_task.md` (pasta de documentação) para que a mudança seja feita corretamente com migration correspondente.
+> **Nenhum outro agente deve modificar esses arquivos.** Se precisar de alterações no schema, comunicar ao Database Agent via `e_historico/z_next_task.md` (pasta de documentação) para que a mudança seja feita corretamente com migration correspondente.

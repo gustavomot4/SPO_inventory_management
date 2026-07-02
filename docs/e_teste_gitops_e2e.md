@@ -5,7 +5,7 @@
 > Enquanto este checklist não passar 100%, **não** ative o GitOps na loja (política do backlog — GITOPS-009).
 >
 > **Onde rodar:** uma máquina de TESTE (nunca a loja). Docker Desktop instalado, repositório na pasta do projeto.
-> **Referências:** `deploy/RUNBOOK.md`, ADR-005, `plano/plano_gitops_atualizacoes.md`.
+> **Referências:** `docs/d_runbook.md`, ADR-005, `b_plano/c_plano_gitops_atualizacoes.md`.
 
 Convenções usadas abaixo:
 - **Log:** `deploy/updates.log` (toda decisão do updater fica aqui).
@@ -127,7 +127,7 @@ Convenções usadas abaixo:
 - [ ] Backup pré-update criado a cada atualização e restauração testada (4.5).
 - [ ] (Se aplicável) breaking restaura o banco (4.4).
 
-Com todos os itens marcados, o GITOPS-009 pode ser dado como concluído no `plano/backlog.md` e o
+Com todos os itens marcados, o GITOPS-009 pode ser dado como concluído no `b_plano/b_backlog.md` e o
 auto-update pode ser ativado nas máquinas das lojas (rodar `deploy\instalar-atualizacao-automatica.bat`
 como administrador, ou apenas abrir pelo `iniciar.bat`, que já instala a Tarefa Agendada na 1ª vez).
 

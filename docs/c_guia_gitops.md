@@ -2,8 +2,8 @@
 
 > Para quem nunca ouviu falar de GitOps. Explica **o que é**, **para que serve**, **como foi montado
 > neste sistema** e, principalmente, **como você usa no dia a dia** (incluindo como commitar tudo).
-> Documentos irmãos: `RUNBOOK.md` (referência rápida de operação), `TESTE_GITOPS_E2E.md` (checklist de
-> teste), `plano/plano_gitops_atualizacoes.md` e ADR-005 (na pasta de documentação).
+> Documentos irmãos: `d_runbook.md` (referência rápida de operação), `e_teste_gitops_e2e.md` (checklist de
+> teste), `b_plano/c_plano_gitops_atualizacoes.md` e ADR-005 (na pasta de documentação).
 
 ---
 
@@ -235,7 +235,7 @@ Resultado: uma versão ruim **não derruba a loja** — ela volta sozinha para a
   (atualizou, convergiu, falhou, fez rollback, estava offline...).
 - **Qual versão a máquina está fixada:** a linha `SPO_VERSION="..."` no `.env`.
 - **Qual versão as lojas devem rodar:** `deploy/stable.json`.
-- Passo a passo completo de validação (incluindo teste de rollback): `deploy/TESTE_GITOPS_E2E.md`.
+- Passo a passo completo de validação (incluindo teste de rollback): `docs/e_teste_gitops_e2e.md`.
 
 Frases típicas no `updates.log` e o que querem dizer:
 

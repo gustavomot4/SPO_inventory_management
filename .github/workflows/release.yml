@@ -14,7 +14,7 @@
 # Requisito unico de configuracao no GitHub: nenhum secret extra.
 # GITHUB_TOKEN ja autentica no GHCR (permissions: packages: write).
 # Apos a PRIMEIRA release: tornar o package "spo" PUBLICO em
-# github.com/users/gustavomot4/packages (pull anonimo nas lojas) — ver RUNBOOK.
+# github.com/users/gustavomot4/packages (pull anonimo nas lojas) — ver docs/d_runbook.md.
 # =============================================================================
 
 name: Release (build + publish edge)
