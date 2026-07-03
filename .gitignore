@@ -37,6 +37,9 @@ docker-compose.yml.bak
 # Tela de carregamento — modo (primeira vez/reinicio) gerado pelo iniciar.bat
 loading_mode.js
 
+# Marcador local de instalacao concluida (deteccao de 1a execucao sem Docker)
+deploy/instalacao_concluida
+
 # Prisma
 prisma/migrations/dev/
 

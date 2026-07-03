@@ -172,12 +172,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     // byPaymentMethod (apenas vendas ativas)
-    const methodMap = new Map<string, { count: number; totalCents: number }>()
+    // v2.5: acumula também as taxas por método (débito/PIX/crédito) p/ breakdown com líquido
+    const methodMap = new Map<string, { count: number; totalCents: number; feeCents: number }>()
     for (const sale of activeSales) {
-      const existing = methodMap.get(sale.paymentMethod) ?? { count: 0, totalCents: 0 }
+      const existing = methodMap.get(sale.paymentMethod) ?? { count: 0, totalCents: 0, feeCents: 0 }
       methodMap.set(sale.paymentMethod, {
         count: existing.count + 1,
         totalCents: existing.totalCents + sale.totalCents,
+        feeCents: existing.feeCents + (sale.feeCents ?? 0),
       })
     }
     const byPaymentMethod: SalesByPaymentMethod[] = Array.from(methodMap.entries())
@@ -186,6 +188,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         paymentMethodLabel: PAYMENT_METHOD_LABELS[method as PaymentMethod] ?? method,
         count: data.count,
         totalCents: data.totalCents,
+        feeCents: data.feeCents,
+        netCents: data.totalCents - data.feeCents,
       }))
       .sort((a, b) => b.totalCents - a.totalCents)
 

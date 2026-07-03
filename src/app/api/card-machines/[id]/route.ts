@@ -36,6 +36,8 @@ export async function GET(
         id: machine.id,
         name: machine.name,
         feeBasisPoints: machine.feeBasisPoints,
+        debitFeeBasisPoints: machine.debitFeeBasisPoints,
+        pixFeeBasisPoints: machine.pixFeeBasisPoints,
         isActive: machine.isActive,
         createdAt: machine.createdAt,
         updatedAt: machine.updatedAt,
@@ -71,7 +73,7 @@ export async function PATCH(
       return NextResponse.json<ApiError>({ error: 'Body inválido', code: 'INVALID_BODY' }, { status: 400 })
     }
 
-    const { name, feeBasisPoints, isActive } = body as Record<string, unknown>
+    const { name, feeBasisPoints, isActive, debitFeeBasisPoints, pixFeeBasisPoints } = body as Record<string, unknown>
 
     if (name !== undefined) {
       if (typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 100) {
@@ -96,6 +98,17 @@ export async function PATCH(
       }
     }
 
+    // v2.5: taxas opcionais de débito e PIX (null = limpar; undefined = não alterar)
+    for (const [field, value] of [['debitFeeBasisPoints', debitFeeBasisPoints], ['pixFeeBasisPoints', pixFeeBasisPoints]] as const) {
+      if (value !== undefined && value !== null &&
+        (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > FEE_MAX_BASIS_POINTS)) {
+        return NextResponse.json<ApiError>(
+          { error: `A taxa informada em "${field}" é inválida. O máximo permitido é 50%`, code: 'INVALID_FEE' },
+          { status: 400 }
+        )
+      }
+    }
+
     if (isActive !== undefined && typeof isActive !== 'boolean') {
       return NextResponse.json<ApiError>(
         { error: 'O campo "isActive" deve ser boolean', code: 'INVALID_BODY' },
@@ -103,10 +116,12 @@ export async function PATCH(
       )
     }
 
-    const updateData: { name?: string; feeBasisPoints?: number; isActive?: boolean } = {}
+    const updateData: { name?: string; feeBasisPoints?: number; isActive?: boolean; debitFeeBasisPoints?: number | null; pixFeeBasisPoints?: number | null } = {}
     if (name !== undefined) updateData.name = (name as string).trim()
     if (feeBasisPoints !== undefined) updateData.feeBasisPoints = feeBasisPoints as number
     if (isActive !== undefined) updateData.isActive = isActive as boolean
+    if (debitFeeBasisPoints !== undefined) updateData.debitFeeBasisPoints = debitFeeBasisPoints as number | null
+    if (pixFeeBasisPoints !== undefined) updateData.pixFeeBasisPoints = pixFeeBasisPoints as number | null
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json<ApiError>(
@@ -125,6 +140,8 @@ export async function PATCH(
         id: machine.id,
         name: machine.name,
         feeBasisPoints: machine.feeBasisPoints,
+        debitFeeBasisPoints: machine.debitFeeBasisPoints,
+        pixFeeBasisPoints: machine.pixFeeBasisPoints,
         isActive: machine.isActive,
         createdAt: machine.createdAt,
         updatedAt: machine.updatedAt,
@@ -161,6 +178,8 @@ export async function DELETE(
         id: machine.id,
         name: machine.name,
         feeBasisPoints: machine.feeBasisPoints,
+        debitFeeBasisPoints: machine.debitFeeBasisPoints,
+        pixFeeBasisPoints: machine.pixFeeBasisPoints,
         isActive: machine.isActive,
         createdAt: machine.createdAt,
         updatedAt: machine.updatedAt,

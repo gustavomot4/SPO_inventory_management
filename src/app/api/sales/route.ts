@@ -99,9 +99,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 400 }
       )
     }
-    if (!isCardPayment && cardMachineId) {
+    // v2.5 (MAQU-004): PIX aceita maquininha OPCIONAL (PIX via maquininha tem taxa própria);
+    // PIX sem maquininha = PIX direto, sem taxa (comportamento anterior preservado)
+    if (pm === PAYMENT_METHOD.CASH && cardMachineId) {
       return NextResponse.json<ApiError>(
-        { error: 'Maquininha nao permitida para CASH ou PIX', code: 'CARD_MACHINE_NOT_ALLOWED' },
+        { error: 'Maquininha nao permitida para CASH', code: 'CARD_MACHINE_NOT_ALLOWED' },
         { status: 400 }
       )
     }
@@ -143,7 +145,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    type CardMachineRecord = { id: string; name: string; feeBasisPoints: number; isActive: boolean }
+    type CardMachineRecord = {
+      id: string; name: string; feeBasisPoints: number
+      debitFeeBasisPoints: number | null; pixFeeBasisPoints: number | null
+      isActive: boolean
+    }
     let cardMachine: CardMachineRecord | null = null
     if (cardMachineId) {
       if (typeof cardMachineId !== 'string') {
@@ -153,7 +159,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
       cardMachine = await prisma.cardMachine.findUnique({
         where: { id: cardMachineId as string },
-        select: { id: true, name: true, feeBasisPoints: true, isActive: true },
+        select: { id: true, name: true, feeBasisPoints: true, debitFeeBasisPoints: true, pixFeeBasisPoints: true, isActive: true },
       }) as CardMachineRecord | null
       if (!cardMachine || !cardMachine.isActive) {
         return NextResponse.json<ApiError>(
@@ -223,7 +229,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     let feeCents: number | null = null
 
     if (cardMachine) {
-      if (finalInstallments > 1) {
+      if (pm === PAYMENT_METHOD.CREDIT && finalInstallments > 1) {
         const instRecord = await prisma.cardMachineInstallment.findFirst({
           where: { cardMachineId: cardMachine.id, installments: finalInstallments, isActive: true },
           select: { feeBasisPoints: true },
@@ -236,8 +242,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         }
         installmentFeeBasisPoints = instRecord.feeBasisPoints
         feeCents = Math.round(totalCents * instRecord.feeBasisPoints / 10000)
-      } else {
+      } else if (pm === PAYMENT_METHOD.CREDIT) {
         feeCents = Math.round(totalCents * cardMachine.feeBasisPoints / 10000)
+      } else if (pm === PAYMENT_METHOD.DEBIT) {
+        // v2.5: taxa própria de DÉBITO (antes usava a taxa de crédito à vista; null = 0%)
+        feeCents = Math.round(totalCents * (cardMachine.debitFeeBasisPoints ?? 0) / 10000)
+      } else if (pm === PAYMENT_METHOD.PIX) {
+        // v2.5: PIX via maquininha usa a taxa PIX configurada (null = 0%)
+        feeCents = Math.round(totalCents * (cardMachine.pixFeeBasisPoints ?? 0) / 10000)
       }
     }
 

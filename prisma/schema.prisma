@@ -1,7 +1,7 @@
 // =============================================================================
 // PRISMA SCHEMA — SPO (Sistema Pimenta Ousada)
 // Database Agent | MVP-004 + DT-004 + DT-005 + DT-007 + PROD-007 + DT-010 | 2026-05-29
-// Versão: 2.4
+// Versão: 2.5
 // =============================================================================
 //
 // Stack: Next.js 14+ + Prisma ORM + SQLite (MVP) → PostgreSQL (v2/cloud)
@@ -17,6 +17,8 @@
 //   v2.4 (DT-010):  Settings ganhou address? e phone? (COM-006).
 //                   CardMachineInstallment: nova tabela para taxas de parcelamento (MAQU-003/VEND-007).
 //                   Sale ganhou installments (default 1) e installmentFeeBasisPoints? (VEND-007).
+//   v2.5 (MAQU-004): CardMachine ganhou debitFeeBasisPoints? e pixFeeBasisPoints? — taxas de
+//                   débito e PIX via maquininha. Venda PIX pode ter cardMachineId (opcional).
 //
 // CONVENÇÕES:
 //   - Preços SEMPRE em centavos (Int) — nunca Float/Decimal para dinheiro
@@ -139,7 +141,9 @@ model StockEntry {
 model CardMachine {
   id             String  @id @default(cuid())
   name           String
-  feeBasisPoints Int     @map("fee_basis_points") // taxa à vista (1×) — ex: 199 = 1,99%
+  feeBasisPoints      Int  @map("fee_basis_points")       // taxa CRÉDITO à vista (1×) — ex: 199 = 1,99%
+  debitFeeBasisPoints Int? @map("debit_fee_basis_points") // taxa DÉBITO — null = não configurada (0%)
+  pixFeeBasisPoints   Int? @map("pix_fee_basis_points")   // taxa PIX via maquininha — null = não configurada (0%)
   isActive       Boolean @default(true) @map("is_active")
   createdAt      String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("created_at")
   updatedAt      String  @default(dbgenerated("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))")) @map("updated_at")
@@ -198,7 +202,7 @@ model Sale {
   subtotalCents            Int     @map("subtotal_cents")              // soma dos itens SEM desconto
   discountCents            Int     @default(0) @map("discount_cents")  // 0 = sem desconto
   totalCents               Int     @map("total_cents")                 // = subtotalCents - discountCents
-  cardMachineId            String? @map("card_machine_id")             // null para CASH e PIX
+  cardMachineId            String? @map("card_machine_id")             // null p/ CASH e PIX direto; opcional p/ PIX via maquininha (v2.5)
   feeCents                 Int?    @map("fee_cents")                   // taxa estimada — informativo
   installments             Int     @default(1) @map("installments")    // parcelas: 1 = à vista (VEND-007)
   installmentFeeBasisPoints Int?   @map("installment_fee_basis_points") // taxa usada (null se à vista)

@@ -15,7 +15,7 @@ O processo, bem resumido, foi um pipeline de agentes especializados (os prompts 
 1. **Contexto e planejamento** — definição do que a loja precisava e do plano de build.
 2. **Agente de banco de dados** — modelagem do schema Prisma e das migrations.
 3. **Agentes de implementação** — APIs, telas e regras de negócio.
-4. **Agente de QA (adversarial)** — várias passagens caçando bugs, corrigindo e documentando cada achado (relatórios em `77777777_SPO_Project_DOCs/d_qa/`). Até esta versão foram 14 passagens e 84 achados encontrados e corrigidos (QA-001 a QA-084).
+4. **Agente de QA (adversarial)** — várias passagens caçando bugs, corrigindo e documentando cada achado (relatórios em `77777777_SPO_Project_DOCs/e_qa/`). Até esta versão foram 14 passagens e 84 achados encontrados e corrigidos (QA-001 a QA-084).
 
 Ou seja: a pessoa atua como **diretor e revisor**, e os agentes fazem o trabalho pesado de código — sempre com verificação (type-check, testes de borda, revisão de segurança) antes de cada entrega.
 
@@ -149,7 +149,7 @@ Offline:       sem internet, o updater desiste em ~5s e o sistema sobe
 
 `GET /api/health` expõe `{ ok: true, version: "vX.Y.Z" }` e é usado pelo updater para validar a atualização.
 
-Guia operacional completo (bootstrap, releases, rollback manual, troubleshooting): [`docs/d_runbook.md`](docs/d_runbook.md). Detalhes de arquitetura: ADR-005 em `77777777_SPO_Project_DOCs/a_contexto/f_decisoes_arquitetura.md`.
+Guia operacional completo (bootstrap, releases, rollback manual, troubleshooting): `77777777_SPO_Project_DOCs/c_docs_tecnicos/d_runbook.md`. Detalhes de arquitetura: ADR-005 em `77777777_SPO_Project_DOCs/a_contexto/f_decisoes_arquitetura.md`.
 
 ---
 
@@ -180,13 +180,6 @@ SPO_inventory_management/
 │   ├── stable.json             # Canal das lojas (atualizado via "Promote to stable")
 │   ├── spo-updater.ps1         # Agente de atualização (backup, pull, health, rollback)
 │   └── instalar-atualizacao-automatica.bat  # Cria a Tarefa Agendada (18h30)
-├── docs/                       # Documentação técnica e operacional (a_ → f_ = ordem de leitura)
-│   ├── a_schema_design.md       # Design do banco de dados (schema, regras, índices)
-│   ├── b_deployment.md          # Guia técnico de implantação
-│   ├── c_guia_gitops.md         # Guia do fluxo GitOps
-│   ├── d_runbook.md             # Guia operacional de releases/rollback
-│   ├── e_teste_gitops_e2e.md    # Checklist de validação E2E do GitOps
-│   └── f_roteiro_apresentacao_sistema.docx  # Roteiro de apresentação do sistema
 ├── .github/workflows/          # CI: release.yml (build+push GHCR) e promote.yml
 ├── Dockerfile                  # Build multi-stage (node:20-alpine → standalone)
 ├── docker-compose.yml          # Orquestração — imagem pinada via SPO_VERSION

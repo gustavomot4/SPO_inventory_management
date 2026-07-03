@@ -46,6 +46,31 @@ echo [OK] Docker encontrado.
 echo.
 
 :: -------------------------------------------------------
+:: 1.5 Abrir a tela de carregamento JA — antes do Docker.
+::     Primeira execucao: marcador deploy\instalacao_concluida
+::     (gravado apos o 1o start OK). Se o daemon ja estiver de pe,
+::     o volume do banco confirma com precisao. DOCKER_COLD avisa
+::     a tela que o boot inclui a subida do Docker Desktop.
+:: -------------------------------------------------------
+set FIRST_RUN=1
+if exist "%~dp0deploy\instalacao_concluida" set FIRST_RUN=0
+set DOCKER_COLD=1
+%DOCKER_CMD% info >nul 2>nul
+if %errorlevel% equ 0 (
+    set DOCKER_COLD=0
+    %DOCKER_CMD% volume inspect spo-pimenta-ousada-data >nul 2>nul
+    if !errorlevel! equ 0 (set FIRST_RUN=0) else (set FIRST_RUN=1)
+)
+if !FIRST_RUN! equ 1 (
+    echo [INFO] Primeira execucao detectada.
+) else (
+    echo [INFO] Reiniciando o sistema...
+)
+>"%~dp0loading_mode.js" echo window.SPO_FIRST_RUN=!FIRST_RUN!;window.SPO_DOCKER_COLD=!DOCKER_COLD!;
+start "" "%~dp0loading.html"
+echo.
+
+:: -------------------------------------------------------
 :: 2. Verificar se o daemon esta rodando
 :: -------------------------------------------------------
 %DOCKER_CMD% info >nul 2>nul
@@ -111,35 +136,9 @@ if errorlevel 1 (
 echo.
 
 :: -------------------------------------------------------
-:: 3. Detectar primeira execucao
-::    Checa o volume do banco — criado apenas na 1a execucao.
-::    Nao usa o nome da imagem pois o docker compose gera
-::    "spo_inventory_management-spo", nao "spo-pimenta-ousada".
-:: -------------------------------------------------------
-%DOCKER_CMD% volume inspect spo-pimenta-ousada-data >nul 2>nul
-if %errorlevel% neq 0 (
-    set FIRST_RUN=1
-) else (
-    set FIRST_RUN=0
-)
-
-:: -------------------------------------------------------
-:: 4. Abrir tela de carregamento
-::    loading.html e unico e tem os dois modos (primeira vez /
-::    reinicio). O modo e passado via loading_mode.js, gerado
-::    aqui a cada abertura (estado local, fora do git).
-:: -------------------------------------------------------
-if !FIRST_RUN! equ 1 (
-    echo [INFO] Primeira execucao detectada.
-    >"%~dp0loading_mode.js" echo window.SPO_FIRST_RUN=1;
-) else (
-    echo [INFO] Reiniciando o sistema...
-    >"%~dp0loading_mode.js" echo window.SPO_FIRST_RUN=0;
-)
-start "" "%~dp0loading.html"
-
-:: -------------------------------------------------------
-:: 5. Iniciar containers
+:: 3. Iniciar containers
+::    (deteccao de primeira execucao e tela de carregamento
+::     acontecem na secao 1.5, antes do Docker subir)
 :: -------------------------------------------------------
 if !FIRST_RUN! equ 1 (
     echo [INFO] Preparando o sistema pela primeira vez...
@@ -167,6 +166,12 @@ if %errorlevel% neq 0 (
     echo       Veja as mensagens acima para identificar o problema.
     pause
     exit /b 1
+)
+
+:: Marcador de instalacao concluida — permite detectar "primeira execucao"
+:: sem depender do Docker estar de pe (secao 1.5).
+if not exist "%~dp0deploy\instalacao_concluida" (
+    >"%~dp0deploy\instalacao_concluida" echo ok
 )
 
 echo.

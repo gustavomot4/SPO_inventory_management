@@ -28,6 +28,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       id: m.id,
       name: m.name,
       feeBasisPoints: m.feeBasisPoints,
+      debitFeeBasisPoints: m.debitFeeBasisPoints,
+      pixFeeBasisPoints: m.pixFeeBasisPoints,
       isActive: m.isActive,
       createdAt: m.createdAt,
       updatedAt: m.updatedAt,
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json<ApiError>({ error: 'Body inválido', code: 'INVALID_BODY' }, { status: 400 })
     }
 
-    const { name, feeBasisPoints } = body as Record<string, unknown>
+    const { name, feeBasisPoints, debitFeeBasisPoints, pixFeeBasisPoints } = body as Record<string, unknown>
 
     if (!name || typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 100) {
       return NextResponse.json<ApiError>(
@@ -73,12 +75,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
+    // v2.5: taxas opcionais de débito e PIX (null/undefined = não configurada)
+    for (const [field, value] of [['debitFeeBasisPoints', debitFeeBasisPoints], ['pixFeeBasisPoints', pixFeeBasisPoints]] as const) {
+      if (value !== undefined && value !== null &&
+        (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > FEE_MAX_BASIS_POINTS)) {
+        return NextResponse.json<ApiError>(
+          { error: `A taxa informada em "${field}" é inválida. O máximo permitido é 50%`, code: 'INVALID_FEE' },
+          { status: 400 }
+        )
+      }
+    }
+
     const machine = await prisma.cardMachine.create({
-      data: { name: (name as string).trim(), feeBasisPoints: feeBasisPoints as number },
+      data: {
+        name: (name as string).trim(),
+        feeBasisPoints: feeBasisPoints as number,
+        debitFeeBasisPoints: (debitFeeBasisPoints as number | null | undefined) ?? null,
+        pixFeeBasisPoints: (pixFeeBasisPoints as number | null | undefined) ?? null,
+      },
     })
 
     return NextResponse.json<ApiSuccess<CardMachineResponse>>(
-      { data: { id: machine.id, name: machine.name, feeBasisPoints: machine.feeBasisPoints, isActive: machine.isActive, createdAt: machine.createdAt, updatedAt: machine.updatedAt } },
+      { data: { id: machine.id, name: machine.name, feeBasisPoints: machine.feeBasisPoints, debitFeeBasisPoints: machine.debitFeeBasisPoints, pixFeeBasisPoints: machine.pixFeeBasisPoints, isActive: machine.isActive, createdAt: machine.createdAt, updatedAt: machine.updatedAt } },
       { status: 201 }
     )
   } catch (error) {

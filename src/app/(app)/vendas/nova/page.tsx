@@ -204,9 +204,17 @@ export default function NovaVendaPage() {
   const totalCents = Math.max(0, subtotalCents - discountCents)
 
   const selectedMachine = cardMachines.find(m => m.id === cardMachineId)
-  const effectiveFeeBasisPoints = installments > 1
-    ? (machineInstallments.find(i => i.installments === installments)?.feeBasisPoints ?? selectedMachine?.feeBasisPoints ?? 0)
-    : (selectedMachine?.feeBasisPoints ?? 0)
+  // v2.5: taxa efetiva por método — crédito (à vista/parcelado), débito e PIX via maquininha
+  const effectiveFeeBasisPoints =
+    paymentMethod === PAYMENT_METHOD.CREDIT
+      ? (installments > 1
+        ? (machineInstallments.find(i => i.installments === installments)?.feeBasisPoints ?? selectedMachine?.feeBasisPoints ?? 0)
+        : (selectedMachine?.feeBasisPoints ?? 0))
+      : paymentMethod === PAYMENT_METHOD.DEBIT
+        ? (selectedMachine?.debitFeeBasisPoints ?? 0)
+        : paymentMethod === PAYMENT_METHOD.PIX
+          ? (selectedMachine?.pixFeeBasisPoints ?? 0)
+          : 0
   const feeCents = selectedMachine ? Math.round(totalCents * effectiveFeeBasisPoints / 10000) : 0
 
   async function loadMachineInstallments(machineId: string) {
@@ -574,11 +582,11 @@ export default function NovaVendaPage() {
               ))}
             </div>
 
-            {/* Maquininha (só para DEBIT/CREDIT) */}
-            {paymentMethod && CARD_PAYMENT_METHODS.includes(paymentMethod as PaymentMethod) && (
+            {/* Maquininha — obrigatória p/ DEBIT/CREDIT; opcional p/ PIX via maquininha (v2.5) */}
+            {paymentMethod && (CARD_PAYMENT_METHODS.includes(paymentMethod as PaymentMethod) || paymentMethod === PAYMENT_METHOD.PIX) && (
               <div className="space-y-3">
                 <Select
-                  label="Maquininha *"
+                  label={paymentMethod === PAYMENT_METHOD.PIX ? 'Maquininha (opcional)' : 'Maquininha *'}
                   value={cardMachineId}
                   onChange={e => {
                     setCardMachineId(e.target.value)
@@ -586,8 +594,12 @@ export default function NovaVendaPage() {
                     setMachineInstallments([])
                     if (e.target.value && paymentMethod === 'CREDIT') loadMachineInstallments(e.target.value)
                   }}
-                  placeholder="Selecione..."
-                  options={cardMachines.map(m => ({ value: m.id, label: m.name }))}
+                  placeholder={paymentMethod === PAYMENT_METHOD.PIX ? undefined : 'Selecione...'}
+                  options={
+                    paymentMethod === PAYMENT_METHOD.PIX
+                      ? [{ value: '', label: 'PIX direto (sem taxa)' }, ...cardMachines.map(m => ({ value: m.id, label: m.name + ' — PIX via maquininha' }))]
+                      : cardMachines.map(m => ({ value: m.id, label: m.name }))
+                  }
                 />
                 {paymentMethod === 'CREDIT' && cardMachineId && machineInstallments.length > 0 && (
                   <div>

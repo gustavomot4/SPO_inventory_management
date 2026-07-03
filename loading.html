@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pimenta Ousada — Iniciando</title>
 <!-- loading_mode.js é gerado pelo iniciar.bat a cada abertura (runtime, fora do git):
-     window.SPO_FIRST_RUN = 1 (primeira execução) ou 0 (reinício).
-     Se o arquivo não existir (ex.: abrir este HTML direto), assume reinício. -->
+     window.SPO_FIRST_RUN   = 1 (primeira execução) ou 0 (reinício)
+     window.SPO_DOCKER_COLD = 1 quando o Docker Desktop ainda vai subir (boot frio)
+     Se o arquivo não existir (ex.: abrir este HTML direto), assume reinício quente. -->
 <script src="loading_mode.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
@@ -583,7 +584,8 @@ if (SPO_FIRST) {
     // ── Stage definitions ─────────────────────────────────────
     // [stepIndex, progressStart, progressEnd, durationMs, label]
     const stages = [
-      { step: 0, pStart:  4, pEnd: 10, ms:  8000, text: 'Verificando Docker...' },
+      // Boot frio: etapa 1 inclui a subida do Docker Desktop (~1min)
+      { step: 0, pStart:  4, pEnd: 10, ms: window.SPO_DOCKER_COLD ? 60000 : 8000, text: 'Verificando Docker...' },
       { step: 1, pStart: 10, pEnd: 38, ms: 90000, text: 'Baixando imagens...' },
       { step: 2, pStart: 38, pEnd: 62, ms: 90000, text: 'Instalando componentes...' },
       { step: 3, pStart: 62, pEnd: 88, ms:120000, text: 'Compilando a aplicação...' },
@@ -678,7 +680,9 @@ if (SPO_FIRST) {
     const flash      = document.getElementById('flash');
 
     const CIRCUMF  = 2 * Math.PI * 70; // ≈ 440
-    const DURATION = 18000; // 18s baseline — polling overrides
+    // Boot frio (tela abre antes do Docker Desktop subir): barra mais lenta.
+    // O polling encerra assim que o sistema responder — a duração é só estética.
+    const DURATION = window.SPO_DOCKER_COLD ? 75000 : 18000; // 18s baseline — polling overrides
     let start = Date.now();
     let done  = false;
 

@@ -756,6 +756,8 @@ function SalesTab() {
                               <th className="pb-2 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">Metodo</th>
                               <th className="pb-2 text-right text-xs font-medium uppercase tracking-widest text-muted-foreground">Vendas</th>
                               <th className="pb-2 text-right text-xs font-medium uppercase tracking-widest text-muted-foreground">Total</th>
+                              <th className="pb-2 text-right text-xs font-medium uppercase tracking-widest text-muted-foreground">Taxas</th>
+                              <th className="pb-2 text-right text-xs font-medium uppercase tracking-widest text-muted-foreground">Líquido</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -772,6 +774,8 @@ function SalesTab() {
                                 </td>
                                 <td className="py-2.5 text-right text-muted-foreground">{row.count}</td>
                                 <td className="py-2.5 text-right font-medium text-foreground">{formatCurrency(row.totalCents)}</td>
+                                <td className="py-2.5 text-right text-muted-foreground">{row.feeCents > 0 ? formatCurrency(row.feeCents) : '—'}</td>
+                                <td className="py-2.5 text-right font-medium text-foreground">{formatCurrency(row.netCents)}</td>
                               </tr>
                             ))}
                           </tbody>

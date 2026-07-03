@@ -29,12 +29,16 @@ import type { CardMachineResponse, CardMachineInstallmentResponse, SettingsRespo
 
 interface FormState {
   name: string
-  fee: string // percentual digitado pelo usuário, ex: "1,99"
+  fee: string      // taxa CRÉDITO à vista digitada, ex: "1,99"
+  debitFee: string // taxa DÉBITO — vazio = não configurada (v2.5)
+  pixFee: string   // taxa PIX via maquininha — vazio = não configurada (v2.5)
 }
 
 interface FormErrors {
   name?: string
   fee?: string
+  debitFee?: string
+  pixFee?: string
   general?: string
 }
 
@@ -53,6 +57,8 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
   const [form, setForm] = useState<FormState>({
     name: machine.name,
     fee: (machine.feeBasisPoints / 100).toFixed(2).replace('.', ','),
+    debitFee: machine.debitFeeBasisPoints != null ? (machine.debitFeeBasisPoints / 100).toFixed(2).replace('.', ',') : '',
+    pixFee: machine.pixFeeBasisPoints != null ? (machine.pixFeeBasisPoints / 100).toFixed(2).replace('.', ',') : '',
   })
   const [errors, setErrors] = useState<FormErrors>({})
   const [saving, setSaving] = useState(false)
@@ -171,6 +177,17 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
         errs.fee = 'Taxa inválida (ex: 1,99)'
       }
     }
+    // v2.5: débito e PIX são opcionais — vazio = não configurada
+    for (const key of ['debitFee', 'pixFee'] as const) {
+      const raw = form[key].trim()
+      if (!raw) continue
+      try {
+        const bps = parseBasisPoints(raw)
+        if (bps > 5000) errs[key] = 'A taxa não pode ser maior que 50%'
+      } catch {
+        errs[key] = 'Taxa inválida (ex: 1,99)'
+      }
+    }
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -201,7 +218,7 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
         'border-b border-border last:border-0 px-6 py-4 bg-brand-50/30',
         !machine.isActive && 'opacity-60'
       )}>
-        <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-end gap-3">
           <div className="flex-1 min-w-0">
             <Input
               label="Nome"
@@ -212,13 +229,31 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
               autoFocus
             />
           </div>
-          <div className="w-full sm:w-36">
+          <div className="w-full sm:w-28">
             <Input
-              label="Taxa (%)"
+              label="Crédito (%)"
               value={form.fee}
               onChange={e => setForm(p => ({ ...p, fee: e.target.value }))}
               error={errors.fee}
               placeholder="1,99"
+            />
+          </div>
+          <div className="w-full sm:w-28">
+            <Input
+              label="Débito (%)"
+              value={form.debitFee}
+              onChange={e => setForm(p => ({ ...p, debitFee: e.target.value }))}
+              error={errors.debitFee}
+              placeholder="—"
+            />
+          </div>
+          <div className="w-full sm:w-28">
+            <Input
+              label="PIX (%)"
+              value={form.pixFee}
+              onChange={e => setForm(p => ({ ...p, pixFee: e.target.value }))}
+              error={errors.pixFee}
+              placeholder="—"
             />
           </div>
           <div className="flex items-center gap-2 pb-0.5">
@@ -255,7 +290,10 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{machine.name}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {formatBasisPoints(machine.feeBasisPoints)} por transação
+            Crédito {formatBasisPoints(machine.feeBasisPoints)}
+            {machine.debitFeeBasisPoints != null && <> · Débito {formatBasisPoints(machine.debitFeeBasisPoints)}</>}
+            {machine.pixFeeBasisPoints != null && <> · PIX {formatBasisPoints(machine.pixFeeBasisPoints)}</>}
+            {' '}por transação
           </p>
         </div>
         <Badge variant={machine.isActive ? 'success' : 'muted'}>
@@ -331,7 +369,7 @@ function CardMachineRow({ machine, onToggleActive, onUpdate }: CardMachineRowPro
               <div className="flex items-center gap-3 text-xs">
                 <span className="w-12 text-muted-foreground font-medium">1× à vista</span>
                 <span className="text-foreground">{formatBasisPoints(machine.feeBasisPoints)}</span>
-                <span className="text-muted-foreground text-[10px]">(taxa da maquininha)</span>
+                <span className="text-muted-foreground text-[10px]">(taxa crédito à vista)</span>
               </div>
               {/* Parcelamentos cadastrados */}
               {installments.map(inst => (
@@ -426,8 +464,8 @@ export default function ConfiguracoesPage() {
   // ── State: Maquininhas ──
   const [machines, setMachines] = useState<CardMachineResponse[]>([])
   const [loading, setLoading] = useState(true)
-  const [addForm, setAddForm] = useState<{ name: string; fee: string }>({ name: '', fee: '' })
-  const [addErrors, setAddErrors] = useState<{ name?: string; fee?: string; general?: string }>({})
+  const [addForm, setAddForm] = useState<{ name: string; fee: string; debitFee: string; pixFee: string }>({ name: '', fee: '', debitFee: '', pixFee: '' })
+  const [addErrors, setAddErrors] = useState<{ name?: string; fee?: string; debitFee?: string; pixFee?: string; general?: string }>({})
   const [adding, setAdding] = useState(false)
 
   // ── State: Dados da Loja ──
@@ -597,32 +635,52 @@ export default function ConfiguracoesPage() {
         if (bps > 5000) errs.fee = 'A taxa não pode ser maior que 50%'
       } catch { errs.fee = 'Taxa inválida (ex: 1,99)' }
     }
+    // v2.5: débito e PIX opcionais
+    for (const key of ['debitFee', 'pixFee'] as const) {
+      const raw = addForm[key].trim()
+      if (!raw) continue
+      try {
+        const bps = parseBasisPoints(raw)
+        if (bps > 5000) errs[key] = 'A taxa não pode ser maior que 50%'
+      } catch { errs[key] = 'Taxa inválida (ex: 1,99)' }
+    }
     if (Object.keys(errs).length > 0) { setAddErrors(errs); return }
     setAdding(true)
     try {
       const res = await fetch('/api/card-machines', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: addForm.name.trim(), feeBasisPoints: parseBasisPoints(addForm.fee) }),
+        body: JSON.stringify({
+          name: addForm.name.trim(),
+          feeBasisPoints: parseBasisPoints(addForm.fee),
+          debitFeeBasisPoints: addForm.debitFee.trim() ? parseBasisPoints(addForm.debitFee) : null,
+          pixFeeBasisPoints: addForm.pixFee.trim() ? parseBasisPoints(addForm.pixFee) : null,
+        }),
       })
       const json: ApiResponse<CardMachineResponse> = await res.json()
       if (!res.ok) { setAddErrors({ general: 'error' in json ? json.error : 'Erro ao adicionar' }); return }
       if ('data' in json) setMachines(prev => [...prev, json.data])
-      setAddForm({ name: '', fee: '' })
+      setAddForm({ name: '', fee: '', debitFee: '', pixFee: '' })
       setAddErrors({})
     } catch { setAddErrors({ general: 'Erro de conexão.' }) }
     finally { setAdding(false) }
   }
 
-  async function handleUpdate(id: string, form: { name: string; fee: string }): Promise<string | null> {
+  async function handleUpdate(id: string, form: { name: string; fee: string; debitFee: string; pixFee: string }): Promise<string | null> {
     let bps: number
     try { bps = parseBasisPoints(form.fee) } catch { return 'Taxa inválida (ex: 1,99)' }
     if (bps > 5000) return 'A taxa não pode ser maior que 50%'
+    // v2.5: débito e PIX opcionais — vazio limpa a taxa (null)
+    let debitBps: number | null = null
+    let pixBps: number | null = null
+    try { debitBps = form.debitFee.trim() ? parseBasisPoints(form.debitFee) : null } catch { return 'Taxa de débito inválida (ex: 1,99)' }
+    try { pixBps = form.pixFee.trim() ? parseBasisPoints(form.pixFee) : null } catch { return 'Taxa de PIX inválida (ex: 1,99)' }
+    if ((debitBps ?? 0) > 5000 || (pixBps ?? 0) > 5000) return 'A taxa não pode ser maior que 50%'
     try {
       const res = await fetch(`/api/card-machines/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name.trim(), feeBasisPoints: bps }),
+        body: JSON.stringify({ name: form.name.trim(), feeBasisPoints: bps, debitFeeBasisPoints: debitBps, pixFeeBasisPoints: pixBps }),
       })
       const json: ApiResponse<CardMachineResponse> = await res.json()
       if (!res.ok) return 'error' in json ? json.error : 'Erro ao salvar'
@@ -851,7 +909,7 @@ export default function ConfiguracoesPage() {
               <Plus className="h-4 w-4 text-brand-600" />
               Adicionar maquininha
             </p>
-            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-end gap-3">
               <div className="flex-1 min-w-0">
                 <Input
                   label="Nome"
@@ -862,13 +920,33 @@ export default function ConfiguracoesPage() {
                   onKeyDown={e => e.key === 'Enter' && handleAdd()}
                 />
               </div>
-              <div className="w-full sm:w-36">
+              <div className="w-full sm:w-28">
                 <Input
-                  label="Taxa à vista (%)"
+                  label="Crédito à vista (%)"
                   value={addForm.fee}
                   onChange={e => setAddForm(p => ({ ...p, fee: e.target.value }))}
                   error={addErrors.fee}
                   placeholder="1,99"
+                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                />
+              </div>
+              <div className="w-full sm:w-28">
+                <Input
+                  label="Débito (%)"
+                  value={addForm.debitFee}
+                  onChange={e => setAddForm(p => ({ ...p, debitFee: e.target.value }))}
+                  error={addErrors.debitFee}
+                  placeholder="opcional"
+                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                />
+              </div>
+              <div className="w-full sm:w-28">
+                <Input
+                  label="PIX (%)"
+                  value={addForm.pixFee}
+                  onChange={e => setAddForm(p => ({ ...p, pixFee: e.target.value }))}
+                  error={addErrors.pixFee}
+                  placeholder="opcional"
                   onKeyDown={e => e.key === 'Enter' && handleAdd()}
                 />
               </div>

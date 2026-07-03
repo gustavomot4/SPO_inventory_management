@@ -69,7 +69,9 @@ export type CardMachineInstallmentResponse = {
 export type CardMachineResponse = {
   id: string
   name: string
-  feeBasisPoints: number // ex: 199 = 1,99%
+  feeBasisPoints: number // taxa crédito à vista — ex: 199 = 1,99%
+  debitFeeBasisPoints: number | null // taxa débito — null = não configurada (v2.5)
+  pixFeeBasisPoints: number | null   // taxa PIX via maquininha — null = não configurada (v2.5)
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -317,6 +319,8 @@ export type SalesByPaymentMethod = {
   paymentMethodLabel: string
   count: number
   totalCents: number
+  feeCents: number // taxas estimadas do método no período (v2.5)
+  netCents: number // totalCents - feeCents (v2.5)
 }
 
 export type TopVariation = {
